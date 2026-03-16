@@ -8,6 +8,8 @@ import os
 import numpy as np
 import pandas as pd
 import joblib
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
@@ -21,6 +23,7 @@ TARGET = "lifetime"
 
 COOLING_COLS = ["Cooling1", "Cooling2", "Cooling3"]
 COOLING_LABELS = {0: "Furnace", 1: "Air", 2: "Oil", 3: "Water"}
+# Furnace: 노냉, Air: 공냉, Oil: 유냉, Water: 수냉
 
 COMPOSITION_COLS = [
     "C", "Si", "Mn", "P", "S", "Cr", "Mo", "W",
@@ -42,6 +45,32 @@ def load_raw_data(path: str = RAW_PATH) -> pd.DataFrame:
     print(f"Loaded {path}: {df.shape[0]} rows, {df.shape[1]} columns")
     return df
 
+def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Handle missing values based on domain logic.
+    - Composition columns: Fill NaN with 0 (assumed as 'not added').
+    - Essential columns: Drop rows if Target, Stress, or Temp is missing.
+    """
+    # 결측치 처리
+    df = df.copy()
+    df[COMPOSITION_COLS] = df[COMPOSITION_COLS].fillna(0)
+    df = df.dropna(subset=[TARGET, "stress", "temp"])
+    print("Missing values handled: Composition filled with 0, Essential rows dropped.")
+    return df
+
+def check_outliers(df: pd.DataFrame, col: str):
+    # 이상치 존재 확인 (미제거, 관찰용)
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
+    if not outliers.empty:
+        print(f"  - {col}: {len(outliers)}개의 통계적 이상치 발견")
+    else:
+        print(f"  - {col}: 이상치 없음")
 
 def remove_invalid_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Remove physically impossible values only.
@@ -49,6 +78,7 @@ def remove_invalid_rows(df: pd.DataFrame) -> pd.DataFrame:
     - Zero or negative lifetime (log transform needs > 0)
     NOTE: 0 in composition columns is intentional (element not added).
     """
+    # 데이터 무결성 검사
     n_before = len(df)
     mask = (
         (df[TARGET] > 0)
@@ -69,6 +99,8 @@ def remove_invalid_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 def log_transform_target(df: pd.DataFrame) -> pd.DataFrame:
     """Apply log10 to the target variable (lifetime)."""
+    # 수명 데이터의 넓은 범위를 축소하여 이분산성 해결
+    # 모델이 큰 수치에만 편향되지 않고 고르게 학습하도록 안정화
     df = df.copy()
     df["log_lifetime"] = np.log10(df[TARGET])
     print(
@@ -134,16 +166,52 @@ def preprocess(
     # 1. Load
     df = load_raw_data()
 
-    # 2. Remove invalid
+    # 2. Handle missing values
+    df = handle_missing_values(df)
+
+    # 3. Remove invalid rows
     df = remove_invalid_rows(df)
 
-    # 3. Log-transform target
+    # 4. Outlier detection
+    print("\n[Outlier Detection (Observation Only)]")
+    for col in [TARGET, "stress", "temp"]:
+        check_outliers(df, col)
+
+    # 5. Log-transform target
     df = log_transform_target(df)
 
-    # 4. One-hot encode cooling
+    # 6. One-hot encode cooling
     df = one_hot_encode_cooling(df)
 
-    # 5. Feature / target split
+    # 7. Physics-informed feature engineering
+    # Hollomon-Jaffe Parameter 기반 가혹도(severity) 파생 변수 생성
+    # Formula: T * (C + log10(t)) | T: Kelvin, C: 20, t: hours
+
+    print("\nGenerating severity features (Using Kelvin)...")
+
+    for p in ['N', 'T', 'A']:
+        temp_col, time_col = f"{p}temp", f"{p}time"
+        # 0인 경우는 해당 공정 생략이므로 계산 제외
+        df[f'{p}_severity'] = np.where(
+            df[temp_col] > 0,
+            df[temp_col] * (20 + np.log10(df[time_col] + 1e-6)),
+            0
+        )
+
+    # 8. Visualization
+    print("\nGenerating correlation heatmap...")
+    corr_df = df.select_dtypes(include=[np.number]).corr()
+
+    plt.figure(figsize=(20, 16))
+    sns.heatmap(corr_df, cmap='coolwarm', annot=False, linewidths=0.5)
+    plt.title("Feature Correlation Heatmap", fontsize=15)
+    
+    heatmap_path = os.path.join(DATA_DIR, "correlation_heatmap.png")
+    plt.savefig(heatmap_path)
+    plt.close() 
+    print(f"Heatmap saved to: {heatmap_path}")
+    
+    # 9. Feature / target split
     feature_cols = get_feature_columns(df)
     X = df[feature_cols]
     y = df["log_lifetime"]
@@ -151,13 +219,13 @@ def preprocess(
     print(f"\nFeatures ({len(feature_cols)}): {feature_cols}")
     print(f"Samples: {len(X)}")
 
-    # 6. Train / test split
+    # 10. Train / test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state,
     )
     print(f"Train: {len(X_train)}, Test: {len(X_test)}")
 
-    # 7. Scale
+    # 11. Scale
     scaler = build_preprocessor(X_train)
     X_train_scaled = pd.DataFrame(
         scaler.transform(X_train), columns=feature_cols, index=X_train.index,
@@ -166,7 +234,7 @@ def preprocess(
         scaler.transform(X_test), columns=feature_cols, index=X_test.index,
     )
 
-    # 8. Save artifacts
+    # 12. Save artifacts
     if save:
         preprocessor_path = os.path.join(DATA_DIR, "preprocessor.pkl")
         joblib.dump(
