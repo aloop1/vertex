@@ -10,7 +10,7 @@ import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import StandardScaler
 
 # ── Paths ────────────────────────────────────────────────────────────────
@@ -185,6 +185,7 @@ def preprocess(
 
     # 7. Physics-informed feature engineering
     # Hollomon-Jaffe Parameter 기반 가혹도(severity) 파생 변수 생성
+    # 추후 라르손 밀러 써 보기
     # Formula: T * (C + log10(t)) | T: Kelvin, C: 20, t: hours
 
     print("\nGenerating severity features (Using Kelvin)...")
@@ -219,12 +220,20 @@ def preprocess(
     print(f"\nFeatures ({len(feature_cols)}): {feature_cols}")
     print(f"Samples: {len(X)}")
 
-    # 10. Train / test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state,
-    )
-    print(f"Train: {len(X_train)}, Test: {len(X_test)}")
+    # 10. Train / test split (Group-based)
+    # 성분(COMPOSITION_COLS)이 같은 행들을 하나의 그룹으로 묶기 (제품군 단위 분할)
+    groups = df[COMPOSITION_COLS].astype(str).agg('-'.join, axis=1)
+    
+    gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
+    train_idx, test_idx = next(gss.split(X, y, groups=groups))
 
+    X_train, X_test = X.iloc[train_idx].copy(), X.iloc[test_idx].copy()
+    y_train, y_test = y.iloc[train_idx].copy(), y.iloc[test_idx].copy()
+
+    print(f"\n총 제품군 수: {groups.nunique()}")
+    print(f"학습셋: {len(X_train)}행 ({groups.iloc[train_idx].nunique()}개 제품군)")
+    print(f"테스트셋: {len(X_test)}행 ({groups.iloc[test_idx].nunique()}개 제품군)")
+    
     # 11. Scale
     scaler = build_preprocessor(X_train)
     X_train_scaled = pd.DataFrame(
