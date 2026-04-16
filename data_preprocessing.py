@@ -21,10 +21,6 @@ RAW_PATH = os.path.join(DATA_DIR, "taka.xlsx")
 # ── Column definitions ──────────────────────────────────────────────────
 TARGET = "lifetime"
 
-COOLING_COLS = ["Cooling1", "Cooling2", "Cooling3"]
-COOLING_LABELS = {0: "Furnace", 1: "Air", 2: "Oil", 3: "Water"}
-# Furnace: 노냉, Air: 공냉, Oil: 유냉, Water: 수냉
-
 COMPOSITION_COLS = [
     "C", "Si", "Mn", "P", "S", "Cr", "Mo", "W",
     "Ni", "Cu", "V", "Nb", "N", "Al", "B", "Co", "Ta", "O",
@@ -110,24 +106,6 @@ def log_transform_target(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def one_hot_encode_cooling(df: pd.DataFrame) -> pd.DataFrame:
-    """One-hot encode cooling rate columns (categorical: 0-3)."""
-    df = df.copy()
-    for col in COOLING_COLS:
-        dummies = pd.get_dummies(df[col], prefix=col, dtype=int)
-        # Ensure all categories exist
-        for val, label in COOLING_LABELS.items():
-            expected_col = f"{col}_{val}"
-            if expected_col not in dummies.columns:
-                dummies[expected_col] = 0
-        # Sort columns for consistency
-        dummies = dummies[[f"{col}_{v}" for v in sorted(COOLING_LABELS.keys())]]
-        df = pd.concat([df, dummies], axis=1)
-    df = df.drop(columns=COOLING_COLS)
-    print(f"One-hot encoded {COOLING_COLS} -> {len(COOLING_LABELS) * len(COOLING_COLS)} columns")
-    return df
-
-
 def build_preprocessor(X_train: pd.DataFrame) -> StandardScaler:
     """Fit a StandardScaler on the numeric features of the training set."""
     scaler = StandardScaler()
@@ -153,10 +131,9 @@ def preprocess(
       1. Load raw data
       2. Remove physically impossible values
       3. Log-transform target
-      4. One-hot encode cooling rate columns
-      5. Train/test split
-      6. Fit StandardScaler on train set, transform both
-      7. Save preprocessor and processed data
+      4. Train/test split
+      5. Fit StandardScaler on train set, transform both
+      6. Save preprocessor and processed data
     Returns dict with keys: X_train, X_test, y_train, y_test, scaler, feature_names
     """
     print("=" * 60)
@@ -180,10 +157,7 @@ def preprocess(
     # 5. Log-transform target
     df = log_transform_target(df)
 
-    # 6. One-hot encode cooling
-    df = one_hot_encode_cooling(df)
-
-    # 7. Physics-informed feature engineering
+    # 6. Physics-informed feature engineering
     # Hollomon-Jaffe Parameter 기반 가혹도(severity) 파생 변수 생성
     # 추후 라르손 밀러 써 보기
     # Formula: T * (C + log10(t)) | T: Kelvin, C: 20, t: hours
@@ -199,7 +173,7 @@ def preprocess(
             0
         )
 
-    # 8. Visualization
+    # 7. Visualization
     print("\nGenerating correlation heatmap...")
     corr_df = df.select_dtypes(include=[np.number]).corr()
 
@@ -212,7 +186,7 @@ def preprocess(
     plt.close() 
     print(f"Heatmap saved to: {heatmap_path}")
     
-    # 9. Feature / target split
+    # 8. Feature / target split
     feature_cols = get_feature_columns(df)
     X = df[feature_cols]
     y = df["log_lifetime"]
@@ -220,7 +194,7 @@ def preprocess(
     print(f"\nFeatures ({len(feature_cols)}): {feature_cols}")
     print(f"Samples: {len(X)}")
 
-    # 10. Train / test split (Group-based)
+    # 9. Train / test split (Group-based)
     # 성분(COMPOSITION_COLS)이 같은 행들을 하나의 그룹으로 묶기 (제품군 단위 분할)
     groups = df[COMPOSITION_COLS].astype(str).agg('-'.join, axis=1)
     
@@ -234,7 +208,7 @@ def preprocess(
     print(f"학습셋: {len(X_train)}행 ({groups.iloc[train_idx].nunique()}개 제품군)")
     print(f"테스트셋: {len(X_test)}행 ({groups.iloc[test_idx].nunique()}개 제품군)")
     
-    # 11. Scale
+    # 10. Scale
     scaler = build_preprocessor(X_train)
     X_train_scaled = pd.DataFrame(
         scaler.transform(X_train), columns=feature_cols, index=X_train.index,
@@ -243,7 +217,7 @@ def preprocess(
         scaler.transform(X_test), columns=feature_cols, index=X_test.index,
     )
 
-    # 12. Save artifacts
+    # 11. Save artifacts
     if save:
         preprocessor_path = os.path.join(DATA_DIR, "preprocessor.pkl")
         joblib.dump(
@@ -251,7 +225,6 @@ def preprocess(
                 "scaler": scaler,
                 "feature_names": feature_cols,
                 "target": "log_lifetime",
-                "cooling_labels": COOLING_LABELS,
             },
             preprocessor_path,
         )
