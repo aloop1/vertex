@@ -24,7 +24,7 @@ PLOT_DIR = os.path.join(ROOT_DIR, "plots")
 os.makedirs(PLOT_DIR, exist_ok=True)
 
 sys.path.insert(0, ROOT_DIR)
-from data_preprocessing import preprocess
+from 데이터전처리 import preprocess
 
 N_SELECT = 13
 CORR_THRESHOLD = 0.85  # 두 피처 간 |corr| > 임계값이면 중요도 낮은 쪽 제거

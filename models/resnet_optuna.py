@@ -34,7 +34,7 @@ PLOT_DIR = os.path.join(ROOT_DIR, "plots")
 os.makedirs(PLOT_DIR, exist_ok=True)
 
 sys.path.insert(0, ROOT_DIR)
-from data_preprocessing import preprocess
+from 데이터전처리 import preprocess
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 N_TRIALS    = 30

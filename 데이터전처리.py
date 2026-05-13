@@ -36,13 +36,13 @@ CONDITION_COLS: List[str] = ["stress", "temp"]
 COMPOSITION_COLS: List[str] = [
     "C", "Si", "Mn", "P", "S",
     "Cr", "Mo", "W", "Ni", "Cu",
-    "V", "Nb", "N", "Al", "B", "Co", "Ta", "O", "Rh",
+    "V", "Nb", "N", "Al", "B", "Co", "Ta", "O", "Re",
 ]
 HEAT_TREATMENT_COLS: List[str] = [
     "Ntemp", "Ntime", "Ttemp", "Ttime", "Atemp", "Atime",
 ]
 COOLING_COLS: List[str] = ["Cooling1", "Cooling2", "Cooling3"]
-EXTRA_COLS: List[str] = ["Rh"]
+EXTRA_COLS: List[str] = ["Re"]
 
 CORE_COLUMNS: List[str] = [
     TARGET_COL,
@@ -66,7 +66,7 @@ TAKA_COLUMN_NAMES: List[str] = [
     "Ntemp", "Ntime", "Cooling1",
     "Ttemp", "Ttime", "Cooling2",
     "Atemp", "Atime", "Cooling3",
-    "Rh",
+    "Re",
 ]
 
 
@@ -192,7 +192,7 @@ def load_creep_csv_data(path: Path | str = CREEP_CSV_PATH) -> pd.DataFrame:
         "B": "B",
         "Co": "Co",
         "Ta": "Ta",
-        "Rh": "Re",
+        "Re": "Re",
     }
     for target_col, source_col in direct_map.items():
         if source_col in df.columns:
@@ -233,6 +233,7 @@ def load_creep_data_csv(path: Path | str = CREEP_DATA_CSV_PATH) -> pd.DataFrame:
         "Al": "Al",
         "B": "B",
         "Co": "Co",
+        "Re": "Re",
     }
     for target_col, source_col in direct_map.items():
         if source_col in df.columns:
@@ -307,6 +308,9 @@ def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
         safe_time = np.maximum(out[time_col].astype(float), 1e-6)
         severity = out[temp_col].astype(float) * (20.0 + np.log10(safe_time))
         out[f"{prefix}_severity"] = np.where(out[temp_col] > 0, severity, 0.0)
+    """크리프 LMP 계산 추가 / T(켈빈) * (C + log10(t)) / 1000, TARGET_COL = lifetime"""
+    C = 20.0 
+    out['LMP'] = out['temp'] * (C + np.log10(out[TARGET_COL])) / 1000.0
 
     return out
 
