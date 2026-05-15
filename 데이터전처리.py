@@ -329,6 +329,40 @@ def add_log_target(df: pd.DataFrame) -> pd.DataFrame:
     out[LOG_TARGET_COL] = np.log10(safe_lifetime)
     return out
 
+def generate_inference_grid(
+    base_row: pd.Series, 
+    temp_range: Tuple[float, float, float] = (600, 810, 10), 
+    stress_range: Tuple[float, float, float] = (100, 310, 10)
+) -> pd.DataFrame:
+    """
+    특정 합금 조성 및 열처리 조건에 대한 온도-응력 가상 격자(Inference Grid) 데이터를 생성한다.
+    
+    Args:
+        base_row (pd.Series): 조성 및 열처리 조건이 포함된 기준 샘플 데이터
+        temp_range (tuple): 온도 범위 및 간격 (start, stop, step)
+        stress_range (tuple): 응력 범위 및 간격 (start, stop, step)
+        
+    Returns:
+        pd.DataFrame: 시각화 및 추론용 가상 격자 데이터프레임
+    """
+    # 1. 격자 포인트 생성 및 조합(Meshgrid)
+    temps = np.arange(*temp_range)
+    stresses = np.arange(*stress_range)
+    t_grid, s_grid = np.meshgrid(temps, stresses)
+    
+    # 2. 데이터프레임 초기화 및 평탄화(Flatten)
+    grid_df = pd.DataFrame({
+        "temp": t_grid.flatten(),
+        "stress": s_grid.flatten()
+    })
+    
+    # 3. 기준 샘플의 고정 피처(조성 및 공정 조건) 복제
+    for col, value in base_row.items():
+        if col not in ["temp", "stress"]:
+            grid_df[col] = value
+            
+    # NOTE: 모델 추론 전 학습 시 사용된 feature_names 순서로 컬럼 재정렬 권장
+    return grid_df
 
 def make_composition_group_id(
     df: pd.DataFrame,
