@@ -1,0 +1,11 @@
+ERROR: taka.xlsx 컬럼 수 불일치: expected=31, found=30
+Traceback (most recent call last):
+  File "C:\Users\sod09\Documents\GitHub\vertex\app.py", line 123, in run_job
+  File "C:\Users\sod09\Documents\GitHub\vertex\데이터전처리.py", line 365, in prepare_dataset
+    df = load_taka_data(path)
+  File "C:\Users\sod09\Documents\GitHub\vertex\데이터전처리.py", line 154, in load_taka_data
+    raise ValueError(
+        f"taka.xlsx 컬럼 수 불일치: expected={len(TAKA_COLUMN_NAMES)}, found={probe.shape[1]}"
+    )
+ValueError: taka.xlsx 컬럼 수 불일치: expected=31, found=30
+

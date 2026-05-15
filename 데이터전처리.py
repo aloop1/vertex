@@ -150,9 +150,12 @@ def load_taka_data(path: Path | str = TAKA_PATH) -> pd.DataFrame:
     _ensure_exists(path)
 
     probe = pd.read_excel(path, nrows=1)
-    if probe.shape[1] != len(TAKA_COLUMN_NAMES):
+    n_cols = probe.shape[1]
+    expected = len(TAKA_COLUMN_NAMES)
+    # Allow 30-column files (Re column absent) — fill Re with 0
+    if n_cols not in (expected, expected - 1):
         raise ValueError(
-            f"taka.xlsx 컬럼 수 불일치: expected={len(TAKA_COLUMN_NAMES)}, found={probe.shape[1]}"
+            f"taka.xlsx 컬럼 수 불일치: expected={expected}, found={n_cols}"
         )
 
     if _detect_header(path):
@@ -160,8 +163,11 @@ def load_taka_data(path: Path | str = TAKA_PATH) -> pd.DataFrame:
     else:
         df = pd.read_excel(path, header=None)
 
-    df.columns = TAKA_COLUMN_NAMES
-    df = _to_numeric(df, TAKA_COLUMN_NAMES)
+    col_names = TAKA_COLUMN_NAMES if n_cols == expected else TAKA_COLUMN_NAMES[:-1]
+    df.columns = col_names
+    df = _to_numeric(df, col_names)
+    if n_cols == expected - 1:
+        df["Re"] = 0.0
     return df[CORE_COLUMNS].copy()
 
 
