@@ -20,10 +20,12 @@ vertex/
 │   ├── train.py               # XGBoost 모델 학습/평가
 │   ├── transformer_and_tree_ensemble.py # 커스텀 모델 학습/평가
 │   └── compare_models.py      # MLP, RF 모델 학습/ 평가
-├── ga/                        # GA 합금 최적화
-│   ├── config.py              # 도메인 데이터
-│   ├── engine.py              # NSGA-II 기반 다목적 최적화 및 결과 생성
-│   └── fitness.py             # 수명-비용 평가 및 물리적 제약 로직
+├── ga/                        
+│   ├── __init__.py            
+│   ├── config.py              # 전체 설정 관리
+│   ├── physics.py             # 물리 제약 및 penalty 계산
+│   ├── llm.py                 # 초기 seed 생성
+│   └── engine.py              # GA 최적화 실행
 ├── plots/
 │   └── 성능 비교 그래프        # 다양한 알고리즘 간의 수명 예측 정확도 비교
 ├── data_preprocessing.py      # 이전 데이터 전처리 및 피처 엔지니어링
@@ -98,18 +100,33 @@ vertex/
   - 운전 가혹도 지수가 증가할수록 예측 수명이 감소하는 음의 상관 확인
 ---
 
-### 4. 다목적 합금 최적화 및 결과 생성 (ga/)
-- **NSGA-II 기반 다목적 최적화**
-  - ELEMENT_LIFE: AI 예측 수명 극대화
-  - ELEMENT_COST: 실제 LME 시세 및 철합금 거래가 기반 원가 최소화
-  - 파레토 최적해(Pareto Front) 도출을 통해 목표 수명을 만족하는 가성비 배합 선정
-- **물리적 제약 페널티 시스템**
-  - 용접성(Weldability): 탄소당량 및 고온 균열 지수 제어를 통한 시공성 보증
-  - 상 안정성(Phase Stability): 전자 공공수 계산을 통해 취성 조직인 sigma상 석출 원천 봉쇄
-  - 내환경성(Oxidation/Corrosion): R_{PB} 지수 기반 산화막 밀착력 검증 및 황화 저항성 확보
-- **현장 맞춤형 결과 출력**
-  - Base 원소를 포함한 원소의 정밀 배합비(wt\%) 산출
-  - 노말라이징, 템퍼링, 어닐링의 3단계 열처리 공정 가이드 제공
+### 2. Physics-Informed GA 최적화 (`ga/`)
+- 예측 모델 연동:
+  * `preprocessor.pkl`, `selected_features.json`, `resnet_best.pt`를 불러와 GA 후보 조성에 대한 수명 예측 수행
+
+- 탐색 변수 정의:
+  * GA가 직접 조절할 원소 11개 선정: `C, Si, Mn, Cr, Mo, W, Ni, V, Nb, N, B`
+  * 불순물·고가·데이터 부족 원소는 고정값 처리: `P, S, O, Co, Re, Al, Cu, Ta`
+
+- 물리 기반 제약 조건 반영:
+  * KN 계수, Ms temperature, Laves phase 위험도, Z-phase 위험도, CEQ, MX balance등 penalty로 반영
+  * 총합금량 15 wt% 제한 및 원소 단가 기반 비용 계산 추가
+
+- 다목적 최적화:
+  * DEAP 기반 NSGA-II 적용
+  * 최적화 목표: 예측 수명 최대화, 재료 비용 최소화, (물리적 위험도 최소화)
+
+- 합금 조성 보정 장치:
+  * 교차/변이 이후 합금 총합이 15 wt%를 초과하지 않도록 repair 로직 추가
+  * 개별 원소 범위와 전체 합금량 제한을 동시에 만족하도록 보정
+
+- LLM 기반 초기 seed 생성:
+  * Gemini API로 초기 합금 조성 seed 생성 구조 설계
+  * 개발 중에는 local/cached seed를 사용하고, 최종 검증 시에만 API를 호출한 뒤 저장된 JSON seed 재사용
+
+- 결과 저장:
+  * 최종 추천 조성 저장: `best_alloy.json`
+  * Pareto 후보 Top 10 저장: `pareto_top10.json`, `pareto_top10.csv`
 ---
 
 ## 🛠 기술 스택
