@@ -10,3 +10,5 @@ torch
 optuna
 matplotlib
 deap
+python-dotenv
+google-generativeai
