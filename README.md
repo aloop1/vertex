@@ -1,6 +1,6 @@
 # AI 기반 크립 수명 예측 및 합금 설계 시스템
 
-> 고온·고압 환경 핵심 소재의 크리프(Creep) 파단 수명을 예측하고, 수명을 최대화하는 최적 합금 조성을 AI로 도출하는 웹 애플리케이션
+> 고온·고압 환경 핵심 소재의 크립(Creep) 파단 수명을 예측하고, 수명을 최대화하는 최적 합금 조성을 AI로 도출하는 웹 애플리케이션
 
 ---
 
@@ -17,27 +17,24 @@ vertex/
 ├── documents/
 │   └── 회의록.md               # 팀 프로젝트 진행 기록
 ├── models/
-│   ├── train.py               # XGBoost 모델 학습/평가
 │   ├── transformer_and_tree_ensemble.py # 커스텀 모델 학습/평가
-│   └── compare_models.py      # MLP, RF 모델 학습/ 평가
+│   └── LMP_데이터증강.py       # LMP 기반 데이터 증강
 ├── ga/                        
 │   ├── __init__.py            
 │   ├── config.py              # 전체 설정 관리
 │   ├── physics.py             # 물리 제약 및 penalty 계산
 │   ├── llm.py                 # 초기 seed 생성
 │   └── engine.py              # GA 최적화 실행
-├── plots/
-│   └── 성능 비교 그래프        # 다양한 알고리즘 간의 수명 예측 정확도 비교
 ├── data_preprocessing.py      # 이전 데이터 전처리 및 피처 엔지니어링
-├── 데이터전처리.py             # 새롭게 추가된 데이터셋 병합 및 데이터 전처리
-├── streamlit_app.py           # Streamlit 기반 웹 애플리케이션 실행 파일
+├── 데이터전처리.py             # 추가된 데이터셋 병합 및 데이터 전처리
+├── app.py           # Streamlit 기반 웹 애플리케이션 실행 파일
 ├── requirements.txt           # 프로젝트 라이브러리 의존성 목록
 └── README.md                  # 본 문서
 ```
 
 ---
 
-### 1. 데이터 전처리 및 피처 엔지니어링 (`data_preprocessing.py`)
+### 1. 데이터 전처리 및 피처 엔지니어링 (`데이터전처리.py`)
 - 원본 데이터(taka.xlsx) 로드: **2066행 × 31열**
 - 데이터 정제: 결측치 처리(합금 성분 NaN → 0) 및 물리적 무결성 검사 (음수 수명/온도 필터링)
 - 이상치 정책: 응력(Stress) 변수의 통계적 이상치(14%)는 실제 실험 인풋 조건(5~450MPa)으로 확인되어 제거 없이 도메인 지식을 반영하여 유지
@@ -52,19 +49,7 @@ vertex/
   * 검증 방식: GroupShuffleSplit을 활용, 학습 시 보지 못한 완전히 새로운 신규 합금 제품군에 대한 예측 성능을 평가함 (총 154개 제품군 중 20%를 테스트셋으로 격리)
 - **최종 피처 수: 30개**
 
-### 2. XGBoost 베이스라인 모델 (`models/train.py`)
-- XGBoost 회귀 모델 학습 (500 estimators, max_depth=6, lr=0.05)
-- **모델 성능:**
-
-| 스케일 | RMSE | R² |
-|--------|------|----|
-| log10 | 0.2793 | **0.9168** |
-| 시간(hours) | 8,741.4 | 0.7533 |
-
-- 모델 저장: `xgb_baseline.json`
-- 시각화: 예측 vs 실제 산점도, 피처 중요도 그래프
-
-### 3. 커스텀 Transformer + 트리 앙상블 모델 (`models/transformer_and_tree_ensemble.py`)
+### 2. 커스텀 Transformer + 트리 앙상블 모델 (`models/transformer_and_tree_ensemble.py`)
 - Transformer 인코더 기반 변수 간 상호작용 학습
   - 각 수치 피처를 토큰으로 변환
   - 다중 헤드 자기어텐션을 직접 구현하여 조성, 운전 조건, 열처리, 물리 파생 변수 간 관계 학습
@@ -100,7 +85,7 @@ vertex/
   - 운전 가혹도 지수가 증가할수록 예측 수명이 감소하는 음의 상관 확인
 ---
 
-### 2. Physics-Informed GA 최적화 (`ga/`)
+### 3. Physics-Informed GA 최적화 (`ga/`)
 - 예측 모델 연동:
   * `preprocessor.pkl`, `selected_features.json`, `resnet_best.pt`를 불러와 GA 후보 조성에 대한 수명 예측 수행
 
@@ -134,8 +119,6 @@ vertex/
 | 구분 | 기술 |
 |------|------|
 | 언어 | Python 3.13 |
-| ML/Data | Pandas, NumPy, Scikit-learn, XGBoost, Seaborn, Joblib |
+| ML/Data | Pandas, NumPy, Scikit-learn, Seaborn, Joblib |
 | 최적화 | DEAP (유전 알고리즘) |
-| 백엔드 | FastAPI |
 | 프론트엔드 | Streamlit |
-| 시각화 | Matplotlib |

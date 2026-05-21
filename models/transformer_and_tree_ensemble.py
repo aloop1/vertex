@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import argparse
 import math
+import pickle
 import random
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -33,6 +34,12 @@ from 데이터전처리 import (
     CONDITION_COLS,
     HEAT_TREATMENT_COLS,
     prepare_dataset,
+)
+from models.LMP_데이터증강 import (
+    AugmentationConfig,
+    assert_synthetic_within_source_bounds,
+    augment_training_data,
+    summarize_augmentation,
 )
 
 
@@ -93,7 +100,6 @@ class TrainHistory:
 
 
 class StandardScalerCustom:
-    """sklearn 의존성을 피하기 위해 직접 구현한 표준화 스케일러."""
 
     def __init__(self) -> None:
         self.mean_: Optional[np.ndarray] = None
@@ -357,6 +363,10 @@ def rmse_np(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
 
 
+def mae_np(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    return float(np.mean(np.abs(y_true - y_pred)))
+
+
 def r2_np(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     denominator = float(np.sum((y_true - y_true.mean()) ** 2))
     if denominator <= 1e-12:
@@ -370,8 +380,10 @@ def evaluate_metrics(y_true_log: np.ndarray, y_pred_log: np.ndarray) -> Dict[str
     y_pred_hours = np.power(10.0, y_pred_log)
     return {
         "rmse_log": rmse_np(y_true_log, y_pred_log),
+        "mae_log": mae_np(y_true_log, y_pred_log),
         "r2_log": r2_np(y_true_log, y_pred_log),
         "rmse_hours": rmse_np(y_true_hours, y_pred_hours),
+        "mae_hours": mae_np(y_true_hours, y_pred_hours),
         "r2_hours": r2_np(y_true_hours, y_pred_hours),
     }
 
@@ -732,10 +744,12 @@ def calibrate_correction_weight(
     y_val: np.ndarray,
     transformer_pred: np.ndarray,
     residual_pred: np.ndarray,
+    max_weight: float,
+    n_steps: int,
 ) -> Tuple[float, float]:
     best_weight = 1.0
     best_rmse = float("inf")
-    for weight in np.linspace(0.0, 1.25, 26):
+    for weight in np.linspace(0.0, max_weight, n_steps):
         pred = transformer_pred + weight * residual_pred
         rmse = rmse_np(y_val, pred)
         if rmse < best_rmse:
@@ -891,6 +905,178 @@ def scenario_sweep(
     return slope, float(pred[0]), float(pred[-1])
 
 
+def build_lmp_config(args: argparse.Namespace, random_state: int) -> AugmentationConfig:
+    return AugmentationConfig(
+        min_group_size=args.lmp_min_group_size,
+        group_by_heat_treatment=True,
+        c_range=(10.0, 30.0),
+        c_step=0.25,
+        max_group_rmse_log=args.lmp_max_group_rmse_log,
+        synthetic_ratio=args.lmp_synthetic_ratio,
+        max_synthetic_per_group=args.lmp_max_synthetic_per_group,
+        random_state=random_state,
+    )
+
+
+def maybe_augment_training_split(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    groups_train: pd.Series,
+    args: argparse.Namespace,
+    logger: TerminalLogger,
+    split_name: str,
+    random_state: int,
+) -> Tuple[pd.DataFrame, pd.Series, pd.Series, Dict[str, Any], pd.DataFrame]:
+    """Apply LMP augmentation to one training split only."""
+    if args.disable_lmp_augmentation:
+        summary = {
+            "enabled": False,
+            "original_rows": float(len(X_train)),
+            "synthetic_rows": 0.0,
+            "total_rows": float(len(X_train)),
+            "fit_groups_total": 0.0,
+            "fit_groups_accepted": 0.0,
+            "fit_acceptance_rate": 0.0,
+        }
+        return (
+            X_train.reset_index(drop=True),
+            y_train.reset_index(drop=True),
+            groups_train.reset_index(drop=True),
+            summary,
+            pd.DataFrame(),
+        )
+
+    config = build_lmp_config(args, random_state)
+    result = augment_training_data(X_train, y_train, groups_train=groups_train, config=config)
+    assert_synthetic_within_source_bounds(result, result.X)
+    summary = {
+        "enabled": True,
+        **summarize_augmentation(result),
+        "config": asdict(config),
+    }
+
+    logger.log(f"[LMP 증강: {split_name}]")
+    logger.log(f"원본 학습 샘플: {result.original_count}")
+    logger.log(f"합성 학습 샘플: {result.synthetic_count}")
+    logger.log(f"증강 후 학습 샘플: {len(result.X)}")
+    logger.log(
+        "피팅 성공 그룹: "
+        f"{int(summary['fit_groups_accepted'])}/{int(summary['fit_groups_total'])}"
+    )
+    logger.log("")
+
+    groups_aug = result.groups
+    if groups_aug is None:
+        groups_aug = groups_train.reset_index(drop=True)
+
+    return result.X, result.y, groups_aug, summary, result.fit_summary
+
+
+def scaler_state(scaler: StandardScalerCustom) -> Dict[str, Optional[np.ndarray]]:
+    return {
+        "mean": None if scaler.mean_ is None else np.asarray(scaler.mean_, dtype=np.float64),
+        "scale": None if scaler.scale_ is None else np.asarray(scaler.scale_, dtype=np.float64),
+    }
+
+
+def tree_node_state(node: Optional[TreeNode]) -> Optional[Dict[str, Any]]:
+    if node is None:
+        return None
+    return {
+        "value": float(node.value),
+        "feature_index": None if node.feature_index is None else int(node.feature_index),
+        "threshold": None if node.threshold is None else float(node.threshold),
+        "left": tree_node_state(node.left),
+        "right": tree_node_state(node.right),
+    }
+
+
+def regression_tree_state(tree: CustomRegressionTree) -> Dict[str, Any]:
+    return {
+        "max_depth": tree.max_depth,
+        "min_samples_leaf": tree.min_samples_leaf,
+        "feature_subsample": tree.feature_subsample,
+        "max_bins": tree.max_bins,
+        "random_state": tree.random_state,
+        "root": tree_node_state(tree.root_),
+    }
+
+
+def tree_ensemble_state(ensemble: CustomTreeEnsemble) -> Dict[str, Any]:
+    return {
+        "n_trees": ensemble.n_trees,
+        "max_depth": ensemble.max_depth,
+        "min_samples_leaf": ensemble.min_samples_leaf,
+        "feature_subsample": ensemble.feature_subsample,
+        "max_bins": ensemble.max_bins,
+        "random_state": ensemble.random_state,
+        "trees": [regression_tree_state(tree) for tree in ensemble.trees_],
+    }
+
+
+def build_artifact_bundle(
+    model: CustomTransformerRegressor,
+    tree_ensemble: CustomTreeEnsemble,
+    scaler: StandardScalerCustom,
+    target_scaler: TargetScalerCustom,
+    feature_names: List[str],
+    group_ids: List[int],
+    correction_weight: float,
+    args: argparse.Namespace,
+    history: TrainHistory,
+    transformer_metrics: Dict[str, float],
+    ensemble_metrics: Dict[str, float],
+    augmentation_summary: Dict[str, Any],
+    physics_checks: Dict[str, float],
+) -> Dict[str, Any]:
+    """Build a reloadable artifact bundle for pickle/torch serialization."""
+    model_state = {
+        key: value.detach().cpu()
+        for key, value in model.state_dict().items()
+    }
+    return {
+        "artifact_version": 1,
+        "model_type": "transformer_tree_ensemble",
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "model_config": {
+            "n_features": len(feature_names),
+            "group_ids": group_ids,
+            "d_model": args.d_model,
+            "n_heads": args.n_heads,
+            "n_layers": args.n_layers,
+            "dropout": args.dropout,
+        },
+        "model_state_dict": model_state,
+        "tree_ensemble": tree_ensemble_state(tree_ensemble),
+        "scaler": scaler_state(scaler),
+        "target_scaler": scaler_state(target_scaler),
+        "feature_names": feature_names,
+        "feature_groups": group_summary(group_ids),
+        "correction_weight": float(correction_weight),
+        "training_args": vars(args),
+        "history": asdict(history),
+        "metrics": {
+            "transformer": transformer_metrics,
+            "ensemble": ensemble_metrics,
+        },
+        "lmp_augmentation": augmentation_summary,
+        "physics_checks": physics_checks,
+    }
+
+
+def save_pickle_artifact(path: Path, artifact: Dict[str, Any]) -> None:
+    """Save the ensemble artifact as a pickle bundle."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as f:
+        pickle.dump(artifact, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def save_torch_artifact(path: Path, artifact: Dict[str, Any]) -> None:
+    """Save the ensemble artifact as a torch .pt bundle."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(artifact, path)
+
+
 def run_pipeline(args: argparse.Namespace) -> None:
     if args.smoke:
         args.epochs = min(args.epochs, 3)
@@ -910,12 +1096,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         logger.log("Transformer 구현: 다중 헤드 자기어텐션 + 인코더 블록")
         logger.log("트리 앙상블 구현: CART 회귀트리 + 부트스트랩 앙상블")
         logger.log("전처리 모듈: 데이터전처리.py")
-        logger.log(f"출력 저장 파일: {Path(args.output_path).resolve()}")
         logger.log("")
 
         set_seed(args.seed)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.log(f"실행 장치: {device}")
 
         dataset = prepare_dataset(rounding_decimals=args.rounding, use_scaler=False)
         raw_outer = group_holdout_split(
@@ -933,9 +1117,40 @@ def run_pipeline(args: argparse.Namespace) -> None:
             seed=args.seed + 17,
         )
 
-        X_inner_train_aug = add_physics_features(raw_inner.X_train)
+        X_inner_train_base, y_inner_train_base, _, inner_lmp_summary, inner_lmp_fit = maybe_augment_training_split(
+            raw_inner.X_train,
+            raw_inner.y_train,
+            raw_inner.groups_train,
+            args,
+            logger,
+            "내부 학습",
+            args.seed + 31,
+        )
+        X_full_train_base, y_full_train_base, _, full_lmp_summary, full_lmp_fit = maybe_augment_training_split(
+            raw_outer.X_train,
+            raw_outer.y_train,
+            raw_outer.groups_train,
+            args,
+            logger,
+            "최종 학습",
+            args.seed + 53,
+        )
+
+        if not args.disable_lmp_augmentation:
+            inner_lmp_fit.assign(split="inner_train").to_csv(
+                MODEL_DIR / "transformer_lmp_inner_fit_summary.csv",
+                index=False,
+                encoding="utf-8-sig",
+            )
+            full_lmp_fit.assign(split="final_train").to_csv(
+                MODEL_DIR / "transformer_lmp_final_fit_summary.csv",
+                index=False,
+                encoding="utf-8-sig",
+            )
+
+        X_inner_train_aug = add_physics_features(X_inner_train_base)
         X_inner_val_aug = add_physics_features(raw_inner.X_test)
-        X_full_train_aug = add_physics_features(raw_outer.X_train)
+        X_full_train_aug = add_physics_features(X_full_train_base)
         X_test_aug = add_physics_features(raw_outer.X_test)
 
         feature_names = list(X_full_train_aug.columns)
@@ -943,8 +1158,9 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
         logger.log("[데이터 분할]")
         logger.log(f"전체 샘플: {len(dataset.X)}")
-        logger.log(f"최종 학습 샘플: {len(raw_outer.X_train)} | 테스트 샘플: {len(raw_outer.X_test)}")
-        logger.log(f"내부 학습 샘플: {len(raw_inner.X_train)} | 검증 샘플: {len(raw_inner.X_test)}")
+        logger.log(f"최종 학습 샘플: {len(X_full_train_base)} | 테스트 샘플: {len(raw_outer.X_test)}")
+        logger.log(f"내부 학습 샘플: {len(X_inner_train_base)} | 검증 샘플: {len(raw_inner.X_test)}")
+        logger.log("검증/테스트 세트에는 합성 샘플을 넣지 않음")
         logger.log(f"피처 수: {len(feature_names)}")
         logger.log(f"피처 그룹: {group_summary(group_ids)}")
         logger.log("")
@@ -953,7 +1169,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         X_inner_train = inner_scaler.fit_transform(X_inner_train_aug[feature_names])
         X_inner_val = inner_scaler.transform(X_inner_val_aug[feature_names])
         inner_target_scaler = TargetScalerCustom()
-        y_inner_train = inner_target_scaler.fit_transform_target(raw_inner.y_train.to_numpy(dtype=float))
+        y_inner_train = inner_target_scaler.fit_transform_target(y_inner_train_base.to_numpy(dtype=float))
         y_inner_val = inner_target_scaler.transform_target(raw_inner.y_test.to_numpy(dtype=float))
 
         selector_model = CustomTransformerRegressor(
@@ -1002,7 +1218,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         )
         inner_train_correction_X = make_correction_features(X_inner_train, inner_train_embedding, inner_train_pred)
         inner_val_correction_X = make_correction_features(X_inner_val, inner_val_embedding, inner_val_pred)
-        inner_residual = raw_inner.y_train.to_numpy(dtype=float) - inner_train_pred
+        inner_residual = y_inner_train_base.to_numpy(dtype=float) - inner_train_pred
 
         selector_tree = CustomTreeEnsemble(
             n_trees=args.n_trees,
@@ -1018,8 +1234,11 @@ def run_pipeline(args: argparse.Namespace) -> None:
             raw_inner.y_test.to_numpy(dtype=float),
             inner_val_pred,
             val_residual_pred,
+            max_weight=args.correction_weight_max,
+            n_steps=args.correction_weight_steps,
         )
         logger.log(f"잔차 보정 계수: {correction_weight:.3f}")
+        logger.log(f"보정계수 탐색 범위: 0.0 ~ {args.correction_weight_max:.2f}")
         logger.log(f"보정 후 내부 검증 RMSE(log10): {weighted_val_rmse:.6f}")
         logger.log("")
 
@@ -1028,7 +1247,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         X_full_train = final_scaler.fit_transform(X_full_train_aug[feature_names])
         X_test = final_scaler.transform(X_test_aug[feature_names])
         final_target_scaler = TargetScalerCustom()
-        y_full_train = final_target_scaler.fit_transform_target(raw_outer.y_train.to_numpy(dtype=float))
+        y_full_train = final_target_scaler.fit_transform_target(y_full_train_base.to_numpy(dtype=float))
 
         final_model = CustomTransformerRegressor(
             n_features=X_full_train.shape[1],
@@ -1060,7 +1279,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             args.batch_size,
         )
         train_correction_X = make_correction_features(X_full_train, train_embedding, train_pred)
-        train_residual = raw_outer.y_train.to_numpy(dtype=float) - train_pred
+        train_residual = y_full_train_base.to_numpy(dtype=float) - train_pred
 
         final_tree = CustomTreeEnsemble(
             n_trees=args.n_trees,
@@ -1089,8 +1308,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         logger.log("")
         logger.log("[최종 테스트 성능]")
         logger.log(f"최종 RMSE(log10): {ensemble_metrics['rmse_log']:.6f}")
+        logger.log(f"최종 MAE(log10): {ensemble_metrics['mae_log']:.6f}")
         logger.log(f"최종 R2(log10): {ensemble_metrics['r2_log']:.6f}")
         logger.log(f"최종 RMSE(hours): {ensemble_metrics['rmse_hours']:.3f}")
+        logger.log(f"최종 MAE(hours): {ensemble_metrics['mae_hours']:.3f}")
         logger.log(f"트리 앙상블 평균 잔차 불확실성(log10 std): {float(np.mean(test_pred['residual_std'])):.6f}")
         logger.log("")
 
@@ -1153,11 +1374,244 @@ def run_pipeline(args: argparse.Namespace) -> None:
         logger.log("물리 변수 순열 중요도 상위:")
         for feature, importance in importance_rows[:5]:
             logger.log(f"  - {FEATURE_KR.get(feature, feature)}: RMSE 증가량 {importance:.6f}")
+
+        physics_checks = {
+            "lmp_rmse": rmse_np(lmp_actual, lmp_pred),
+            "lmp_r2": r2_np(lmp_actual, lmp_pred),
+            "severity_prediction_spearman": severity_corr,
+            "temperature_sweep_slope": temp_slope,
+            "stress_sweep_slope_at_high_temp": stress_slope,
+            "mean_residual_std_log": float(np.mean(test_pred["residual_std"])),
+        }
+        artifact_augmentation_summary = {
+            "inner_train": inner_lmp_summary,
+            "final_train": full_lmp_summary,
+            "test_contains_synthetic": False,
+        }
+        artifact = build_artifact_bundle(
+            model=final_model,
+            tree_ensemble=final_tree,
+            scaler=final_scaler,
+            target_scaler=final_target_scaler,
+            feature_names=feature_names,
+            group_ids=group_ids,
+            correction_weight=correction_weight,
+            args=args,
+            history=history,
+            transformer_metrics=transformer_metrics,
+            ensemble_metrics=ensemble_metrics,
+            augmentation_summary=artifact_augmentation_summary,
+            physics_checks=physics_checks,
+        )
+        pickle_path = Path(args.pickle_path)
+        pt_path = Path(args.pt_path)
+        save_pickle_artifact(pickle_path, artifact)
+        save_torch_artifact(pt_path, artifact)
+        logger.log("")
+        logger.log(f"피클 모델 번들 저장: {pickle_path}")
+        logger.log(f"PyTorch 모델 번들 저장: {pt_path}")
         logger.log("")
         logger.log(f"총 실행 시간: {time.time() - started_at:.1f}초")
         logger.log("=" * 72)
     finally:
         logger.close()
+
+
+DEFAULT_ARTIFACT_PATH = MODEL_DIR / "transformer_tree_ensemble.pkl"
+DEFAULT_TORCH_ARTIFACT_PATH = MODEL_DIR / "transformer_tree_ensemble.pt"
+SMOKE_ARTIFACT_PATH = MODEL_DIR / "transformer_tree_ensemble_smoke.pkl"
+SMOKE_TORCH_ARTIFACT_PATH = MODEL_DIR / "transformer_tree_ensemble_smoke.pt"
+
+
+@dataclass
+class PredictionResult:
+    log_lifetime: float
+    lifetime_hours: float
+    lifetime_years: float
+    transformer_log_lifetime: float
+    residual_correction: float
+    residual_uncertainty_log: float
+
+
+def _restore_scaler(state: Dict[str, Any], cls=StandardScalerCustom) -> StandardScalerCustom:
+    scaler = cls()
+    scaler.mean_ = None if state.get("mean") is None else np.asarray(state["mean"], dtype=np.float64)
+    scaler.scale_ = None if state.get("scale") is None else np.asarray(state["scale"], dtype=np.float64)
+    return scaler
+
+
+def _restore_node(state: Optional[Dict[str, Any]]) -> Optional[TreeNode]:
+    if state is None:
+        return None
+    return TreeNode(
+        value=float(state["value"]),
+        feature_index=None if state.get("feature_index") is None else int(state["feature_index"]),
+        threshold=None if state.get("threshold") is None else float(state["threshold"]),
+        left=_restore_node(state.get("left")),
+        right=_restore_node(state.get("right")),
+    )
+
+
+def _restore_tree(state: Dict[str, Any]) -> CustomRegressionTree:
+    tree = CustomRegressionTree(
+        max_depth=int(state["max_depth"]),
+        min_samples_leaf=int(state["min_samples_leaf"]),
+        feature_subsample=float(state["feature_subsample"]),
+        max_bins=int(state["max_bins"]),
+        random_state=int(state["random_state"]),
+    )
+    tree.root_ = _restore_node(state.get("root"))
+    return tree
+
+
+def _restore_tree_ensemble(state: Dict[str, Any]) -> CustomTreeEnsemble:
+    ensemble = CustomTreeEnsemble(
+        n_trees=int(state["n_trees"]),
+        max_depth=int(state["max_depth"]),
+        min_samples_leaf=int(state["min_samples_leaf"]),
+        feature_subsample=float(state["feature_subsample"]),
+        max_bins=int(state["max_bins"]),
+        random_state=int(state["random_state"]),
+    )
+    ensemble.trees_ = [_restore_tree(tree_state) for tree_state in state["trees"]]
+    return ensemble
+
+
+def resolve_artifact_path(
+    artifact_path: Optional[str | Path] = None,
+    allow_smoke_fallback: bool = False,
+) -> Path:
+    candidates = [Path(artifact_path)] if artifact_path is not None else [
+        DEFAULT_ARTIFACT_PATH,
+        DEFAULT_TORCH_ARTIFACT_PATH,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    if allow_smoke_fallback:
+        for smoke_path in [SMOKE_ARTIFACT_PATH, SMOKE_TORCH_ARTIFACT_PATH]:
+            if smoke_path.exists():
+                return smoke_path
+    raise FileNotFoundError(
+        f"Transformer 모델 번들을 찾을 수 없습니다: {candidates[0]}. "
+        "먼저 models/transformer_and_tree_ensemble.py를 실행해 모델을 학습하세요."
+    )
+
+
+def load_artifact_bundle(path: Path) -> Dict[str, Any]:
+    suffix = path.suffix.lower()
+    if suffix in {".pt", ".pth"}:
+        return torch.load(path, map_location="cpu", weights_only=False)
+    with path.open("rb") as f:
+        return pickle.load(f)
+
+
+class TransformerTreePredictor:
+    """Transformer + tree ensemble pickle inference helper."""
+
+    def __init__(self, artifact: Dict[str, Any], artifact_path: Path) -> None:
+        self.artifact = artifact
+        self.artifact_path = artifact_path
+        self.feature_names = list(artifact["feature_names"])
+        self.correction_weight = float(artifact["correction_weight"])
+        self.device = torch.device("cpu")
+
+        config = artifact["model_config"]
+        self.model = CustomTransformerRegressor(
+            n_features=int(config["n_features"]),
+            group_ids=list(config["group_ids"]),
+            d_model=int(config["d_model"]),
+            n_heads=int(config["n_heads"]),
+            n_layers=int(config["n_layers"]),
+            dropout=float(config["dropout"]),
+        )
+        self.model.load_state_dict(artifact["model_state_dict"], strict=True)
+        self.model.to(self.device)
+        self.model.eval()
+
+        self.tree_ensemble = _restore_tree_ensemble(artifact["tree_ensemble"])
+        self.scaler = _restore_scaler(artifact["scaler"], StandardScalerCustom)
+        self.target_scaler = _restore_scaler(artifact["target_scaler"], TargetScalerCustom)
+
+    @property
+    def is_smoke_model(self) -> bool:
+        return self.artifact_path.name.endswith("_smoke.pkl")
+
+    def _prepare_features(self, rows: pd.DataFrame) -> pd.DataFrame:
+        prepared = rows.copy()
+        for col in ["stress", "temp", *COMPOSITION_COLS, *HEAT_TREATMENT_COLS]:
+            if col not in prepared.columns:
+                prepared[col] = 0.0
+            prepared[col] = pd.to_numeric(prepared[col], errors="coerce").fillna(0.0)
+
+        for prefix in ["N", "T", "A"]:
+            temp_col = f"{prefix}temp"
+            time_col = f"{prefix}time"
+            if f"{prefix}_severity" not in prepared.columns:
+                safe_time = np.maximum(prepared[time_col].astype(float), 1e-6)
+                severity = prepared[temp_col].astype(float) * (20.0 + np.log10(safe_time))
+                prepared[f"{prefix}_severity"] = np.where(prepared[temp_col] > 0, severity, 0.0)
+
+        prepared = add_physics_features(prepared)
+        for col in self.feature_names:
+            if col not in prepared.columns:
+                prepared[col] = 0.0
+        return prepared[self.feature_names].astype(float)
+
+    def predict_dataframe(self, rows: pd.DataFrame, batch_size: int = 512) -> pd.DataFrame:
+        features = self._prepare_features(rows)
+        pred = predict_full_ensemble(
+            self.model,
+            self.tree_ensemble,
+            self.scaler,
+            self.target_scaler,
+            self.feature_names,
+            self.correction_weight,
+            features,
+            self.device,
+            batch_size,
+        )
+        log_life = np.asarray(pred["ensemble_pred"], dtype=float)
+        lifetime_hours = np.power(10.0, log_life)
+        return pd.DataFrame(
+            {
+                "log_lifetime": log_life,
+                "lifetime_hours": lifetime_hours,
+                "lifetime_years": lifetime_hours / 8760.0,
+                "transformer_log_lifetime": pred["transformer_pred"],
+                "residual_correction": pred["residual_pred"] * self.correction_weight,
+                "residual_uncertainty_log": pred["residual_std"],
+            }
+        )
+
+    def predict_one(
+        self,
+        stress: float,
+        temp: float,
+        composition: Dict[str, float],
+        heat_treatment: Dict[str, float],
+    ) -> PredictionResult:
+        row = {"stress": float(stress), "temp": float(temp)}
+        row.update({key: float(value) for key, value in composition.items()})
+        row.update({key: float(value) for key, value in heat_treatment.items()})
+        pred = self.predict_dataframe(pd.DataFrame([row])).iloc[0]
+        return PredictionResult(
+            log_lifetime=float(pred["log_lifetime"]),
+            lifetime_hours=float(pred["lifetime_hours"]),
+            lifetime_years=float(pred["lifetime_years"]),
+            transformer_log_lifetime=float(pred["transformer_log_lifetime"]),
+            residual_correction=float(pred["residual_correction"]),
+            residual_uncertainty_log=float(pred["residual_uncertainty_log"]),
+        )
+
+
+def load_transformer_tree_predictor(
+    artifact_path: Optional[str | Path] = None,
+    allow_smoke_fallback: bool = False,
+) -> TransformerTreePredictor:
+    path = resolve_artifact_path(artifact_path, allow_smoke_fallback=allow_smoke_fallback)
+    artifact = load_artifact_bundle(path)
+    return TransformerTreePredictor(artifact, path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -1167,7 +1621,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rounding", type=int, default=3, help="조성 그룹 반올림 자리수")
     parser.add_argument("--seed", type=int, default=42, help="난수 시드")
 
-    parser.add_argument("--epochs", type=int, default=18, help="Transformer 최대 epoch")
+    parser.add_argument("--epochs", type=int, default=40, help="Transformer 최대 epoch")
     parser.add_argument("--batch-size", type=int, default=128, help="배치 크기")
     parser.add_argument("--d-model", type=int, default=64, help="토큰 임베딩 차원")
     parser.add_argument("--n-heads", type=int, default=4, help="어텐션 헤드 수")
@@ -1178,13 +1632,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--patience", type=int, default=8, help="조기 종료 patience")
     parser.add_argument("--verbose-every", type=int, default=3, help="로그 출력 주기")
 
-    parser.add_argument("--n-trees", type=int, default=40, help="트리 개수")
-    parser.add_argument("--tree-depth", type=int, default=4, help="트리 최대 깊이")
-    parser.add_argument("--min-samples-leaf", type=int, default=14, help="리프 최소 샘플 수")
-    parser.add_argument("--feature-subsample", type=float, default=0.75, help="노드별 피처 샘플링 비율")
-    parser.add_argument("--max-bins", type=int, default=24, help="분할 후보 quantile 개수")
+    parser.add_argument("--n-trees", type=int, default=50, help="트리 개수")
+    parser.add_argument("--tree-depth", type=int, default=5, help="트리 최대 깊이")
+    parser.add_argument("--min-samples-leaf", type=int, default=10, help="리프 최소 샘플 수")
+    parser.add_argument("--feature-subsample", type=float, default=0.8, help="노드별 피처 샘플링 비율")
+    parser.add_argument("--max-bins", type=int, default=28, help="분할 후보 quantile 개수")
+    parser.add_argument("--correction-weight-max", type=float, default=2.0, help="잔차 보정계수 탐색 상한")
+    parser.add_argument("--correction-weight-steps", type=int, default=41, help="잔차 보정계수 탐색 단계 수")
+
+    parser.add_argument("--disable-lmp-augmentation", action="store_true", help="LMP 기반 학습 데이터 증강 비활성화")
+    parser.add_argument("--lmp-min-group-size", type=int, default=5, help="LMP 피팅 최소 그룹 샘플 수")
+    parser.add_argument("--lmp-max-group-rmse-log", type=float, default=0.35, help="허용할 LMP 그룹 피팅 RMSE(log10) 상한")
+    parser.add_argument("--lmp-synthetic-ratio", type=float, default=1.0, help="그룹 크기 대비 합성 샘플 생성 비율")
+    parser.add_argument("--lmp-max-synthetic-per-group", type=int, default=20, help="그룹별 최대 합성 샘플 수")
 
     parser.add_argument("--smoke", action="store_true", help="빠른 실행 확인용 축소 설정")
+    parser.add_argument(
+        "--pickle-path",
+        type=str,
+        default=str(MODEL_DIR / "transformer_tree_ensemble.pkl"),
+        help="학습된 앙상블 피클 번들 저장 경로",
+    )
+    parser.add_argument(
+        "--pt-path",
+        type=str,
+        default=str(MODEL_DIR / "transformer_tree_ensemble.pt"),
+        help="학습된 앙상블 PyTorch 번들 저장 경로",
+    )
     parser.add_argument(
         "--output-path",
         type=str,

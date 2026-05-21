@@ -43,6 +43,7 @@ HEAT_TREATMENT_COLS: List[str] = [
 ]
 COOLING_COLS: List[str] = ["Cooling1", "Cooling2", "Cooling3"]
 EXTRA_COLS: List[str] = ["Re"]
+ANALYSIS_ONLY_COLS: List[str] = ["LMP"]
 
 CORE_COLUMNS: List[str] = [
     TARGET_COL,
@@ -233,7 +234,6 @@ def load_creep_data_csv(path: Path | str = CREEP_DATA_CSV_PATH) -> pd.DataFrame:
         "Al": "Al",
         "B": "B",
         "Co": "Co",
-        "Re": "Re",
     }
     for target_col, source_col in direct_map.items():
         if source_col in df.columns:
@@ -308,9 +308,12 @@ def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
         safe_time = np.maximum(out[time_col].astype(float), 1e-6)
         severity = out[temp_col].astype(float) * (20.0 + np.log10(safe_time))
         out[f"{prefix}_severity"] = np.where(out[temp_col] > 0, severity, 0.0)
-    """크리프 LMP 계산 추가 / T(켈빈) * (C + log10(t)) / 1000, TARGET_COL = lifetime"""
-    C = 20.0 
-    out['LMP'] = out['temp'] * (C + np.log10(out[TARGET_COL])) / 1000.0
+
+    # NOTE:
+    # Downloads 버전과 동일하게 LMP를 추가한다.
+    # 이 값은 lifetime을 사용하므로 학습 피처로 사용할 때는 타깃 누수에 주의가 필요하다.
+    c_value = 20.0
+    out["LMP"] = out["temp"] * (c_value + np.log10(out[TARGET_COL])) / 1000.0
 
     return out
 
@@ -329,40 +332,30 @@ def add_log_target(df: pd.DataFrame) -> pd.DataFrame:
     out[LOG_TARGET_COL] = np.log10(safe_lifetime)
     return out
 
+
 def generate_inference_grid(
-    base_row: pd.Series, 
-    temp_range: Tuple[float, float, float] = (600, 810, 10), 
-    stress_range: Tuple[float, float, float] = (100, 310, 10)
+    base_row: pd.Series,
+    temp_range: Tuple[float, float, float] = (600, 810, 10),
+    stress_range: Tuple[float, float, float] = (100, 310, 10),
 ) -> pd.DataFrame:
-    """
-    특정 합금 조성 및 열처리 조건에 대한 온도-응력 가상 격자(Inference Grid) 데이터를 생성한다.
-    
-    Args:
-        base_row (pd.Series): 조성 및 열처리 조건이 포함된 기준 샘플 데이터
-        temp_range (tuple): 온도 범위 및 간격 (start, stop, step)
-        stress_range (tuple): 응력 범위 및 간격 (start, stop, step)
-        
-    Returns:
-        pd.DataFrame: 시각화 및 추론용 가상 격자 데이터프레임
-    """
-    # 1. 격자 포인트 생성 및 조합(Meshgrid)
+    """시각화/추론용 온도-응력 가상 격자 데이터를 생성한다."""
     temps = np.arange(*temp_range)
     stresses = np.arange(*stress_range)
     t_grid, s_grid = np.meshgrid(temps, stresses)
-    
-    # 2. 데이터프레임 초기화 및 평탄화(Flatten)
-    grid_df = pd.DataFrame({
-        "temp": t_grid.flatten(),
-        "stress": s_grid.flatten()
-    })
-    
-    # 3. 기준 샘플의 고정 피처(조성 및 공정 조건) 복제
+
+    grid_df = pd.DataFrame(
+        {
+            "temp": t_grid.flatten(),
+            "stress": s_grid.flatten(),
+        }
+    )
+
     for col, value in base_row.items():
-        if col not in ["temp", "stress"]:
+        if col not in {"temp", "stress"}:
             grid_df[col] = value
-            
-    # NOTE: 모델 추론 전 학습 시 사용된 feature_names 순서로 컬럼 재정렬 권장
+
     return grid_df
+
 
 def make_composition_group_id(
     df: pd.DataFrame,
@@ -379,8 +372,12 @@ def make_composition_group_id(
 
 
 def build_feature_matrix(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
-    """모델 입력 X, 타깃 y를 생성한다."""
-    exclude = {TARGET_COL, LOG_TARGET_COL}
+    """모델 입력 X, 타깃 y를 생성한다.
+
+    LMP는 분석/검증 지표로는 유지하지만, lifetime을 직접 포함하므로
+    학습 피처에서는 제외한다.
+    """
+    exclude = {TARGET_COL, LOG_TARGET_COL, *ANALYSIS_ONLY_COLS}
     feature_cols = [col for col in df.columns if col not in exclude]
     X = df[feature_cols].copy()
     y = df[LOG_TARGET_COL].copy()
