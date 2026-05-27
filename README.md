@@ -85,33 +85,60 @@ vertex/
   - 운전 가혹도 지수가 증가할수록 예측 수명이 감소하는 음의 상관 확인
 ---
 
-### 3. Physics-Informed GA 최적화 (`ga/`)
+### 3. GA 최적화 (`ga/`)
+
 - 예측 모델 연동:
-  * `preprocessor.pkl`, `selected_features.json`, `resnet_best.pt`를 불러와 GA 후보 조성에 대한 수명 예측 수행
+  * `models/transformer_tree_ensemble.pkl`로 GA 후보 조성의 예측 수명 계산
+  * 모델 입력 feature는 학습 artifact에 저장된 feature schema를 기준으로 구성
 
 - 탐색 변수 정의:
-  * GA가 직접 조절할 원소 11개 선정: `C, Si, Mn, Cr, Mo, W, Ni, V, Nb, N, B`
-  * 불순물·고가·데이터 부족 원소는 고정값 처리: `P, S, O, Co, Re, Al, Cu, Ta`
+  * GA가 직접 조절할 주요 합금 원소 11개 선정: C, Si, Mn, Cr, Mo, W, Ni, V, Nb, N, B
+  * 불순물 또는 현재 설계 대상에서 제외한 원소는 고정값 처리: `P, S, O, Al`
+  * `Co, Ta, Re, Cu` 등 데이터 희박성·비용·설계 범위 문제를 가진 원소는 기본적으로 0 또는 제한값으로 관리
+  * Fe는 직접 최적화하지 않고, 전체 조성 합에서 balance로 계산
 
 - 물리 기반 제약 조건 반영:
-  * KN 계수, Ms temperature, Laves phase 위험도, Z-phase 위험도, CEQ, MX balance등 penalty로 반영
-  * 총합금량 15 wt% 제한 및 원소 단가 기반 비용 계산 추가
+  * 9–12Cr ferritic/martensitic steel 설계 범위를 기준으로 KN 계수, Ms temperature, Laves phase 위험도, Z-phase 위험도, CEQ, MX balance를 계산
+  * 각 지표가 기준값을 초과하거나 미달할 경우 연속 penalty를 부여하여 비현실적 조성 억제
+  * 총합금량 제한 및 원소 단가 기반 재료비 index를 함께 계산
+
+- Mahalanobis OOD penalty:
+  * GA가 학습 데이터 분포 밖의 조성을 선택하는 문제를 줄이기 위함
+  * OOD reference는 `data/ood_reference.pkl`에서 로드하며,
+   reference가 없을 경우 OOD penalty가 조용히 꺼지지 않도록 실행 단계에서 확인
+  * 현재 OOD 기준은 GA 최종 설계 대상인 Fe계 9–12Cr 조성 영역과 대응되는 `taka.xlsx` 기반 조성 분포를 사용
+  * 사용 feature: C, Si, Mn, Cr, Mo, W, Ni, V, Nb, N, B
+
+- CALPHAD 기반 상 안정성 검증:
+  * pycalphad와 Fe계 TDB 파일(`data/thermo/fe_thermo.tdb`)을 사용하여 후보 조성의 제한적 상평형 계산 수행
+  * 계산 대상 phase: `BCC_A2`, `FCC_A1`, `LAVES_PHASE`, `SIGMA`, `M23C6`, `M6C`
+  * Laves phase, Sigma phase, FCC_A1, M6C가 기준 이상 형성될 경우 CALPHAD penalty를 부여
+  * BCC_A2와 M23C6는 Fe계 내열강에서 주요 기지상/탄화물로 해석 가능하므로 주로 기록 및 해석용으로 사용
+
+- LLM 기반 초기 seed 생성:
+  * Gemini API를 사용하여 Fe계 9–12Cr 내열강 설계 범위에 맞는 초기 후보 조성 seed 생성
+  * API 호출 결과는 `data/seed_cache.json`에 저장하여 재사용 가능
+  * LLM seed는 그대로 사용하지 않고, 조성 범위·총합금량·물리 penalty 기준을 통과한 seed만 GA 초기 population에 반영
+  * seed 부족 상황에 대비하여 strict mode 및 cache 기반 fallback 구조를 사용
 
 - 다목적 최적화:
   * DEAP 기반 NSGA-II 적용
-  * 최적화 목표: 예측 수명 최대화, 재료 비용 최소화, (물리적 위험도 최소화)
+  * 최적화 목표:
+    1. 물리 기반 위험도 최소화
+    2. 예측 수명 최대화
+    3. 재료 비용 최소화
+  * 물리 기반 위험도에는 heuristic metallurgy penalty, Mahalanobis OOD penalty, elemental OOD penalty가 포함됨
+  * CALPHAD 검증은 계산 비용을 고려하여 최종 Pareto Top 10 후보에 대해 후처리 검증으로 수행
 
 - 합금 조성 보정 장치:
-  * 교차/변이 이후 합금 총합이 15 wt%를 초과하지 않도록 repair 로직 추가
-  * 개별 원소 범위와 전체 합금량 제한을 동시에 만족하도록 보정
-
-- LLM 기반 초기 seed 생성:
-  * Gemini API로 초기 합금 조성 seed 생성 구조 설계
-  * 개발 중에는 local/cached seed를 사용하고, 최종 검증 시에만 API를 호출한 뒤 저장된 JSON seed 재사용
+  * 교차/변이 이후 개별 원소 범위와 전체 합금량 제한을 만족하도록 repair 로직 적용
+  * Fe balance가 음수가 되거나 총합금량 제한을 초과하는 후보를 방지
+  * GA 탐색 중 물리적으로 불가능한 조성이 누적되지 않도록 후보 조성을 지속적으로 보정
 
 - 결과 저장:
-  * 최종 추천 조성 저장: `best_alloy.json`
-  * Pareto 후보 Top 10 저장: `pareto_top10.json`, `pareto_top10.csv`
+  * 최종 추천 조성 저장: `ga/best_alloy.json`
+  * Pareto 후보 Top 10 저장: `ga/pareto_top10.json`, `ga/pareto_top10.csv`
+  * 저장 결과에는 예측 수명, 재료비, 물리 penalty, OOD distance, CALPHAD phase fraction, 최종 조성 wt%가 포함됨
 ---
 
 ## 🛠 기술 스택
