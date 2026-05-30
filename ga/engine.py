@@ -1354,15 +1354,23 @@ def run_alloy_optimization(u_temp_c, u_stress, u_cost_limit):
         for elem in FULL_COMPOSITION_FEATURES
     }
 
-    # 최종 best 후보 JSON 저장
+    # 최종 best 후보 JSON, CSV 저장
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     best_json_path = RESULTS_DIR / "best_alloy.json"
+    best_csv_path = RESULTS_DIR / "best_alloy.csv"
 
     with open(best_json_path, "w", encoding="utf-8") as f:
         json.dump(best_summary, f, indent=2, ensure_ascii=False)
 
+    pd.DataFrame([best_summary]).to_csv(
+        best_csv_path,
+        index=False,
+        encoding="utf-8-sig",
+    )
+
     print(f"[Result] Best alloy JSON 저장: {best_json_path}")
+    print(f"[Result] Best alloy CSV 저장: {best_csv_path}")
 
     return best_recipe, logbook
 
