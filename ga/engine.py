@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime
 import pandas as pd
 import numpy as np
 import joblib
@@ -990,10 +991,11 @@ def _export_pareto_top_candidates(
     reference_features=None,
     reference_threshold=None,
     cost_limit=None,
-    top_n=30
+    top_n=10,
+    conditions=None,
 ):
     """
-    Pareto 후보 Top 30을 CSV/JSON으로 저장.
+    Pareto 후보 Top N을 CSV/JSON으로 저장.
 
     우선순위:
     1. 물리야금학적 타당성
@@ -1079,9 +1081,16 @@ def _export_pareto_top_candidates(
         encoding="utf-8-sig"
     )
 
+    payload = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "conditions": conditions or {},
+        "count": len(rows),
+        "candidates": rows,
+    }
+
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(
-            rows,
+            payload,
             f,
             indent=2,
             ensure_ascii=False
@@ -1322,7 +1331,14 @@ def run_alloy_optimization(u_temp_c, u_stress, u_cost_limit):
     else:
         candidates = pop
 
-    # 웹 Pareto Top 30 저장
+    _conditions = {
+        "temp_c": u_temp_c,
+        "temp_k": round(temp_k, 2),
+        "stress_mpa": u_stress,
+        "cost_limit": u_cost_limit,
+    }
+
+    # 웹 Pareto Top 10 저장
     top_candidates = _export_pareto_top_candidates(
         candidates=candidates,
         temp_k=temp_k,
@@ -1332,7 +1348,8 @@ def run_alloy_optimization(u_temp_c, u_stress, u_cost_limit):
         reference_features=reference_features,
         reference_threshold=reference_threshold,
         cost_limit=u_cost_limit,
-        top_n=30
+        top_n=10,
+        conditions=_conditions,
     )
 
     # --------------------------------------------------------
@@ -1360,8 +1377,14 @@ def run_alloy_optimization(u_temp_c, u_stress, u_cost_limit):
     best_json_path = RESULTS_DIR / "best_alloy.json"
     best_csv_path = RESULTS_DIR / "best_alloy.csv"
 
+    best_payload = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "conditions": _conditions,
+        "best": best_summary,
+    }
+
     with open(best_json_path, "w", encoding="utf-8") as f:
-        json.dump(best_summary, f, indent=2, ensure_ascii=False)
+        json.dump(best_payload, f, indent=2, ensure_ascii=False)
 
     pd.DataFrame([best_summary]).to_csv(
         best_csv_path,

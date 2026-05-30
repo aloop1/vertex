@@ -250,6 +250,43 @@ def predict():
     return _RESULT_TMPL.replace("__DATA_JSON__", json.dumps(rd, ensure_ascii=False))
 
 
+@app.post("/suggest_params")
+def suggest_params():
+    """파일의 stress/temp 컬럼을 읽어 sweep 파라미터 추천값을 반환."""
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return jsonify({}), 200
+    try:
+        buf = io.BytesIO(file.read())
+        name = (file.filename or "").lower()
+        df = pd.read_excel(buf) if name.endswith(".xlsx") else pd.read_csv(buf)
+        df.columns = [str(c).strip() for c in df.columns]
+        col_lower = {c.lower(): c for c in df.columns}
+        result = {}
+
+        sc = next((col_lower[k] for k in ["stress", "rupture_stress", "applied_stress"] if k in col_lower), None)
+        if sc:
+            s = pd.to_numeric(df[sc], errors="coerce").dropna()
+            s = s[s > 0]
+            if len(s) >= 2:
+                result["stress_min"] = round(float(s.min()), 1)
+                result["stress_max"] = round(float(s.max()), 1)
+                result["fixed_stress"] = round(float(s.median()), 1)
+
+        tc = next((col_lower[k] for k in ["temp", "temperature", "test_temp"] if k in col_lower), None)
+        if tc:
+            t = pd.to_numeric(df[tc], errors="coerce").dropna()
+            t = t[t > 0]
+            if len(t) >= 2:
+                result["temp_min"] = int(round(float(t.min())))
+                result["temp_max"] = int(round(float(t.max())))
+                result["fixed_temp"] = int(round(float(t.median())))
+
+        return jsonify(result)
+    except Exception:
+        return jsonify({}), 200
+
+
 @app.post("/resweep")
 def resweep():
     """재계산 엔드포인트: 파라미터만 바꿔 sweep 재실행, JSON 반환."""
@@ -310,6 +347,216 @@ def resweep():
     })
 
 
+@app.get("/alloy_design")
+def alloy_design():
+    best_path  = PROJECT_ROOT / "ga" / "best_alloy.json"
+    pareto_path = PROJECT_ROOT / "ga" / "pareto_top30.json"
+
+    best_raw = None
+    if best_path.exists():
+        try:
+            with open(best_path, encoding="utf-8") as f:
+                raw = json.load(f)
+            best_raw = raw.get("best", raw) if isinstance(raw, dict) and "best" in raw else raw
+        except Exception:
+            pass
+
+    pareto_candidates = []
+    pareto_meta: dict = {}
+    if pareto_path.exists():
+        try:
+            with open(pareto_path, encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, list):
+                pareto_candidates = raw
+            elif isinstance(raw, dict):
+                pareto_candidates = raw.get("candidates", [])
+                pareto_meta = {k: v for k, v in raw.items() if k != "candidates"}
+        except Exception:
+            pass
+
+    payload = {
+        "best": best_raw,
+        "candidates": pareto_candidates,
+        "meta": pareto_meta,
+    }
+    return _ALLOY_DESIGN_TMPL.replace(
+        "__DATA_JSON__",
+        json.dumps(payload, ensure_ascii=False, default=str)
+    )
+
+
+# ── HTML: Alloy design dashboard ──────────────────────────────────────────
+_ALLOY_DESIGN_TMPL = """<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vertex — 합금 설계 결과</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f1117;color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-height:100vh;padding:24px 32px}
+a{color:#7eb8f7;text-decoration:none}a:hover{text-decoration:underline}
+h1{font-size:1.75rem;color:#7eb8f7;font-weight:700;margin-bottom:4px}
+.page-sub{color:#8898aa;font-size:.85rem;margin-bottom:28px}
+.meta-bar{background:#1a1f30;border:1px solid #2a3048;border-radius:10px;padding:12px 18px;display:flex;flex-wrap:wrap;gap:16px;margin-bottom:24px;font-size:.8rem;color:#8898aa}
+.meta-bar span{color:#c0c8d8}.meta-bar strong{color:#7eb8f7}
+.sec{font-size:.72rem;font-weight:700;color:#7eb8f7;letter-spacing:.09em;text-transform:uppercase;margin:28px 0 10px;padding-bottom:5px;border-bottom:1px solid #2a3048}
+.best-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px}
+@media(max-width:700px){.best-grid{grid-template-columns:1fr}}
+.card{background:#1a1f30;border:1px solid #2a3048;border-radius:12px;padding:20px 24px}
+.card-title{font-size:.72rem;color:#7eb8f7;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;font-size:.88rem}
+.stat-row .lbl{color:#8898aa}
+.stat-row .val{color:#e0e0e0;font-weight:600}
+.stat-row .val.ok{color:#6bf7c6}
+.stat-row .val.warn{color:#f7e06b}
+.stat-row .val.bad{color:#f76b6b}
+.life-num{font-size:2.2rem;font-weight:800;color:#6bf7c6;letter-spacing:-.02em;margin-bottom:2px}
+.life-sub{font-size:.82rem;color:#8898aa}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.pill{background:#12172a;border:1px solid #3a4668;border-radius:6px;padding:4px 10px;font-size:.78rem;color:#c0c8d8}
+.pill strong{color:#7eb8f7}
+.bar-row{margin-bottom:8px}
+.bar-label{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px;color:#8898aa}
+.bar-label .val{color:#c0c8d8}
+.bar-bg{background:#12172a;border-radius:4px;height:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;background:#4a7cf7;transition:width .4s}
+.bar-fill.ok{background:#6bf7c6}
+.bar-fill.warn{background:#f7e06b}
+.bar-fill.bad{background:#f76b6b}
+.candidates-scroll{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-top:4px}
+.candidates-scroll::-webkit-scrollbar{height:5px}
+.candidates-scroll::-webkit-scrollbar-track{background:#12172a}
+.candidates-scroll::-webkit-scrollbar-thumb{background:#35466f;border-radius:3px}
+.cand-card{background:#1a1f30;border:1px solid #2a3048;border-radius:10px;padding:16px;min-width:200px;max-width:220px;flex-shrink:0}
+.cand-rank{font-size:.65rem;color:#7eb8f7;font-weight:700;margin-bottom:6px}
+.cand-life{font-size:1.2rem;font-weight:700;color:#6bf7c6}
+.cand-sub{font-size:.75rem;color:#8898aa;margin-bottom:8px}
+.cand-pills{display:flex;flex-wrap:wrap;gap:4px}
+.cand-pill{background:#12172a;border:1px solid #2a3048;border-radius:4px;padding:2px 7px;font-size:.72rem;color:#c0c8d8}
+.empty{color:#5a6a88;font-size:.88rem;padding:24px 0;text-align:center}
+.ood-ok{color:#6bf7c6}.ood-out{color:#f76b6b}.ood-unk{color:#8898aa}
+</style>
+</head>
+<body>
+<h1>⚙ Vertex — 합금 설계 결과</h1>
+<p class="page-sub"><a href="/">← 크립 수명 예측으로 돌아가기</a></p>
+<div id="meta-bar" class="meta-bar"></div>
+<div id="best-section"></div>
+<div class="sec">Pareto Top 후보</div>
+<div id="candidates-section"></div>
+<script>
+var D=__DATA_JSON__;
+function fmt(v,d){if(v==null||v===undefined)return'—';return parseFloat(v).toFixed(d!=null?d:3);}
+function fmtHrs(log10){if(log10==null)return'—';var h=Math.pow(10,parseFloat(log10));if(h>87600)return(h/8760).toFixed(0)+'년';if(h>1000)return(h/1000).toFixed(1)+'k h';return h.toFixed(0)+' h';}
+function barCls(v,okMax,warnMax){if(v<=okMax)return'ok';if(v<=warnMax)return'warn';return'bad';}
+
+/* Meta bar */
+var mb=document.getElementById('meta-bar');
+var m=D.meta||{};
+var cond=m.conditions||{};
+var parts=[];
+if(m.generated_at) parts.push('<span>생성: <strong>'+m.generated_at+'</strong></span>');
+if(cond.temp_c!=null) parts.push('<span>온도: <strong>'+(cond.temp_c)+' °C</strong></span>');
+if(cond.stress_mpa!=null) parts.push('<span>응력: <strong>'+cond.stress_mpa+' MPa</strong></span>');
+if(cond.cost_limit!=null) parts.push('<span>비용 한도: <strong>$'+cond.cost_limit+'/kg</strong></span>');
+if(m.count!=null) parts.push('<span>후보 수: <strong>'+m.count+'</strong></span>');
+if(!parts.length) parts.push('<span>GA 결과 파일을 읽었습니다.</span>');
+mb.innerHTML=parts.join('');
+
+/* Best alloy */
+var bs=document.getElementById('best-section');
+if(!D.best){
+  bs.innerHTML='<div class="empty">아직 GA 최적화 결과가 없습니다. <code>python ga/engine.py</code>를 실행해 결과를 생성해 주세요.</div>';
+} else {
+  var b=D.best;
+  var logL=b.predicted_log_life;
+  var lifeCls=logL>=5?'ok':logL>=4?'ok':logL>=3?'warn':'bad';
+  var costCls=b.material_cost<30?'ok':b.material_cost<60?'warn':'bad';
+  var riskCls=b.physics_risk<10?'ok':b.physics_risk<50?'warn':'bad';
+  var oodTxt=b.ood_is_out_of_distribution===true?'<span class="ood-out">범위 이탈</span>':b.ood_is_out_of_distribution===false?'<span class="ood-ok">범위 내</span>':'<span class="ood-unk">—</span>';
+  var calTxt=b.thermo_success?'<span class="ood-ok">성공</span>':'<span class="ood-out">미수행/실패</span>';
+
+  /* Composition pills */
+  var ELEMS=['C','Si','Mn','P','S','Cr','Mo','W','Ni','Cu','V','Nb','N','Al','B','Co','Ta','O','Re'];
+  var pillsHtml='';
+  for(var i=0;i<ELEMS.length;i++){var e=ELEMS[i];var v=b[e];if(v&&parseFloat(v)>0) pillsHtml+='<span class="pill"><strong>'+e+'</strong> '+fmt(v,3)+'%</span>';}
+  if(b.Fe_balance&&parseFloat(b.Fe_balance)>0) pillsHtml='<span class="pill"><strong>Fe</strong> '+fmt(b.Fe_balance,2)+'%</span>'+pillsHtml;
+
+  /* Phase bars */
+  var phases=[
+    {key:'bcc_fraction',label:'BCC_A2',okMax:.8,warnMax:1.0},
+    {key:'m23c6_fraction',label:'M₂₃C₆',okMax:.05,warnMax:.1},
+    {key:'laves_fraction',label:'Laves',okMax:.02,warnMax:.05},
+    {key:'sigma_fraction',label:'Sigma',okMax:.01,warnMax:.03},
+    {key:'fcc_fraction',label:'FCC',okMax:.05,warnMax:.1},
+  ];
+  var phBarsHtml='';
+  for(var pi=0;pi<phases.length;pi++){
+    var ph=phases[pi];var v=b[ph.key]!=null?parseFloat(b[ph.key]):null;
+    var pct=v!=null?Math.min(v*100,100):0;
+    var cls=v!=null?barCls(v,ph.okMax,ph.warnMax):'';
+    phBarsHtml+='<div class="bar-row"><div class="bar-label"><span>'+ph.label+'</span><span class="val">'+(v!=null?pct.toFixed(2)+'%':'—')+'</span></div><div class="bar-bg"><div class="bar-fill '+cls+'" style="width:'+pct+'%"></div></div></div>';
+  }
+
+  bs.innerHTML='<div class="sec">최적 합금 후보</div>'+
+  '<div class="best-grid">'+
+  '<div class="card">'+
+  '<div class="card-title">예측 수명</div>'+
+  '<div class="life-num '+lifeCls+'">'+fmtHrs(logL)+'</div>'+
+  '<div class="life-sub">log₁₀(수명) = '+(logL!=null?fmt(logL,3):'—')+'</div>'+
+  '<div style="margin-top:18px">'+
+  '<div class="stat-row"><span class="lbl">재료 비용</span><span class="val '+costCls+'">$'+fmt(b.material_cost,2)+'/kg</span></div>'+
+  '<div class="stat-row"><span class="lbl">물리 위험도</span><span class="val '+riskCls+'">'+fmt(b.physics_risk,2)+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">OOD 상태</span><span class="val">'+oodTxt+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">CALPHAD</span><span class="val">'+calTxt+'</span></div>'+
+  '</div>'+
+  '<div style="margin-top:12px"><div class="card-title" style="margin-bottom:8px">야금 지표</div>'+
+  '<div class="stat-row"><span class="lbl">KN</span><span class="val">'+fmt(b.KN,3)+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">Ms 온도</span><span class="val">'+(b.Ms_temp!=null?fmt(b.Ms_temp,1)+' °C':'—')+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">CEQ</span><span class="val">'+fmt(b.CEQ,3)+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">총 합금량</span><span class="val">'+fmt(b.total_alloy_wt,2)+'%</span></div>'+
+  '</div>'+
+  '</div>'+
+  '<div class="card">'+
+  '<div class="card-title">조성 (wt%)</div>'+
+  '<div class="pills">'+pillsHtml+'</div>'+
+  '<div style="margin-top:20px"><div class="card-title" style="margin-bottom:10px">상 안정성 (CALPHAD)</div>'+
+  phBarsHtml+
+  '</div>'+
+  '</div>'+
+  '</div>';
+}
+
+/* Candidates */
+var cs=document.getElementById('candidates-section');
+if(!D.candidates||!D.candidates.length){
+  cs.innerHTML='<div class="empty">후보 목록이 없습니다.</div>';
+} else {
+  var html='<div class="candidates-scroll">';
+  for(var ci=0;ci<D.candidates.length;ci++){
+    var c=D.candidates[ci];
+    var logL=c.predicted_log_life;
+    var cls=logL>=5?'ok':logL>=4?'ok':logL>=3?'warn':'bad';
+    var ELEMS2=['C','Si','Mn','Cr','Mo','W','Ni','V','Nb','N','B'];
+    var cpHtml='';
+    for(var ei=0;ei<ELEMS2.length;ei++){var e=ELEMS2[ei];var v=c[e];if(v&&parseFloat(v)>0.001) cpHtml+='<span class="cand-pill">'+e+' '+fmt(v,2)+'</span>';}
+    html+='<div class="cand-card">'+
+      '<div class="cand-rank">#'+(ci+1)+'</div>'+
+      '<div class="cand-life '+cls+'">'+fmtHrs(logL)+'</div>'+
+      '<div class="cand-sub">$'+fmt(c.material_cost,1)+'/kg &nbsp;·&nbsp; risk '+fmt(c.physics_risk,1)+'</div>'+
+      '<div class="cand-pills">'+cpHtml+'</div>'+
+      '</div>';
+  }
+  html+='</div>';
+  cs.innerHTML=html;
+}
+</script>
+</body>
+</html>"""
+
+
 # ── HTML: Upload form ──────────────────────────────────────────────────────
 _INDEX_HTML = """<!DOCTYPE html>
 <html lang="ko">
@@ -347,7 +594,8 @@ input[type=number]:focus{outline:none;border-color:#7eb8f7}
 <div class="card">
   <h1>⚙ Vertex</h1>
   <p class="sub">제품 조성·열처리 데이터를 업로드하면 <strong>온도 및 응력 범위별 크립 수명</strong>을 예측합니다.<br>
-  수명(lifetime) 컬럼 없이 구성 데이터만으로 분석 가능합니다.</p>
+  수명(lifetime) 컬럼 없이 구성 데이터만으로 분석 가능합니다.<br>
+  <a href="/alloy_design" style="color:#7eb8f7;font-size:.83rem">⚗ GA 합금 설계 결과 보기 →</a></p>
 
   <form method="POST" action="/predict" enctype="multipart/form-data">
     <div class="sec">데이터 파일</div>
@@ -358,7 +606,7 @@ input[type=number]:focus{outline:none;border-color:#7eb8f7}
         <div class="uz-hint">xlsx 또는 csv &nbsp;·&nbsp; 조성·열처리 컬럼 포함 &nbsp;·&nbsp; 수명 컬럼 불필요</div>
       </label>
       <input type="file" id="fup" name="file" accept=".xlsx,.csv" required
-             onchange="document.getElementById('fname').textContent=this.files[0]?.name||''">
+             onchange="document.getElementById('fname').textContent=this.files[0]?.name||'';suggestParams(this.files[0]);">
     </div>
     <div class="fname" id="fname"></div>
 
@@ -399,6 +647,28 @@ input[type=number]:focus{outline:none;border-color:#7eb8f7}
     <button type="submit" class="btn">▶ &nbsp;수명 예측 실행</button>
   </form>
 </div>
+<script>
+function suggestParams(file){
+  if(!file) return;
+  var fd=new FormData(); fd.append('file',file);
+  fetch('/suggest_params',{method:'POST',body:fd})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      function set(name,val){
+        if(val===undefined||val===null) return;
+        var el=document.querySelector('[name="'+name+'"]');
+        if(el) el.value=val;
+      }
+      set('temp_min',d.temp_min);
+      set('temp_max',d.temp_max);
+      set('fixed_stress',d.fixed_stress);
+      set('stress_min',d.stress_min);
+      set('stress_max',d.stress_max);
+      set('fixed_temp',d.fixed_temp);
+    })
+    .catch(function(){});
+}
+</script>
 </body>
 </html>"""
 
@@ -457,6 +727,8 @@ header h1{font-size:1.2rem;color:#7eb8f7;font-weight:700}
 .pill-row{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;overflow-y:hidden;padding-bottom:4px}
 .pill{display:inline-block;background:#1e2846;color:#7eb8f7;border-radius:4px;padding:2px 8px;margin:2px 2px 2px 0;font-size:.72rem;white-space:nowrap}
 .ch-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:4px}
+.info-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:22px;align-items:start;margin-top:4px}
+@media(max-width:960px){.info-layout{grid-template-columns:1fr}}
 .ht-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;margin-top:4px}
 .ch-box{min-width:0;background:#1a1f30;border:1px solid #2a3048;border-radius:10px;padding:16px 14px;overflow:hidden}
 .ch-sub{font-size:.78rem;color:#8898aa;margin-bottom:10px}
@@ -588,15 +860,18 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 <div class="sec">분석 요약</div>
 <div class="stats" id="stat-bar"></div>
 
-<div class="sec">제품 정보</div>
-<div class="scroll-shell">
-  <div class="prod-grid" id="prod-grid"></div>
-</div>
-
-<div class="sec">조성 분석 (원소 구성, wt%)</div>
-<div class="ch-box">
-  <div class="scroll-shell">
-    <div id="ch-comp" style="height:320px"></div>
+<div class="info-layout">
+  <div>
+    <div class="sec">제품 정보</div>
+    <div class="scroll-shell">
+      <div class="prod-grid" id="prod-grid"></div>
+    </div>
+  </div>
+  <div>
+    <div class="sec">조성 분석 (원소 구성, wt%)</div>
+    <div class="ch-box" id="comp-box" style="overflow-x:auto;overflow-y:hidden">
+      <div id="ch-comp" style="height:320px"></div>
+    </div>
   </div>
 </div>
 
@@ -862,19 +1137,23 @@ function renderHeatmap(idx){
 const ELEM_CLR={'Fe (bal.)':'#2a3a50','Cr':'#e74c3c','Mo':'#9b59b6','W':'#3498db','Ni':'#27ae60','Co':'#1abc9c','V':'#f1c40f','Nb':'#e67e22','Ta':'#d35400','Al':'#bdc3c7','C':'#ecf0f1','Si':'#95a5a6','Mn':'#7f8c8d','N':'#5dade2','B':'#a9cce3','Cu':'#f39c12','P':'#f9e79f','S':'#fad7a0','Rh':'#c39bd3','Re':'#a2d9ce','O':'#f8c471'};
 function renderCompositionChart(){
   if(!requirePlotly(['ch-comp']))return;
-  const visible = RD.products;
-  const N=Math.max(1, visible.length);
-  const panelWidth = 260;
-  const chartWidth = Math.max(960, N * panelWidth);
-  const chartEl = document.getElementById('ch-comp');
-  chartEl.style.width = chartWidth + 'px';
-  chartEl.style.height = '320px';
-  Plotly.react('ch-comp',visible.map((p,i)=>{
-    const W=1/N;
-    const c=i;
-    const labels=Object.keys(p.comp_pie),values=Object.values(p.comp_pie);
-    return {labels,values,type:'pie',hole:0.48,name:p.name,textinfo:'label+percent',textposition:'inside',insidetextorientation:'radial',textfont:{size:10,color:'#fff'},marker:{colors:labels.map(l=>ELEM_CLR[l]||'#5a6a88'),line:{color:'#0f1117',width:1.5}},domain:{x:[c*W+0.015,(c+1)*W-0.015],y:[0.08,0.98]},title:{text:'<b>'+p.name+'</b>',font:{color:COLORS[i%COLORS.length],size:12},position:'bottom center'},hovertemplate:'%{label}<br>%{value:.3f} wt%<br>%{percent}<extra></extra>'};
-  }),{paper_bgcolor:'#1a1f30',plot_bgcolor:'#0f1117',font:{color:'#c0c8d8',size:11},showlegend:false,margin:{l:10,r:10,t:20,b:20},width:chartWidth,height:320},{responsive:false,displayModeBar:false});
+  requestAnimationFrame(function(){
+    const visible = RD.products;
+    const N=Math.max(1, visible.length);
+    const panelWidth = 260;
+    const chartEl = document.getElementById('ch-comp');
+    const box = document.getElementById('comp-box');
+    const boxInner = box ? Math.max(box.clientWidth - 28, 200) : 400;
+    const chartWidth = Math.max(N * panelWidth, boxInner);
+    chartEl.style.width = chartWidth + 'px';
+    chartEl.style.height = '320px';
+    Plotly.react('ch-comp',visible.map((p,i)=>{
+      const W=1/N;
+      const c=i;
+      const labels=Object.keys(p.comp_pie),values=Object.values(p.comp_pie);
+      return {labels,values,type:'pie',hole:0.48,name:p.name,textinfo:'label+percent',textposition:'inside',insidetextorientation:'radial',textfont:{size:10,color:'#fff'},marker:{colors:labels.map(l=>ELEM_CLR[l]||'#5a6a88'),line:{color:'#0f1117',width:1.5}},domain:{x:[c*W+0.015,(c+1)*W-0.015],y:[0.08,0.98]},title:{text:'<b>'+p.name+'</b>',font:{color:COLORS[i%COLORS.length],size:12},position:'bottom center'},hovertemplate:'%{label}<br>%{value:.3f} wt%<br>%{percent}<extra></extra>'};
+    }),{paper_bgcolor:'#1a1f30',plot_bgcolor:'#0f1117',font:{color:'#c0c8d8',size:11},showlegend:false,margin:{l:10,r:10,t:20,b:20},width:chartWidth,height:320},{responsive:false,displayModeBar:false});
+  });
 }
 function renderThermalCycle(){
   if(!requirePlotly(['ch-ht']))return;
