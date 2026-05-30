@@ -95,15 +95,15 @@ vertex/
 
 ### 3. GA 최적화 (`ga/`)
 
-GA 모듈은 수명 예측 모델을 기반으로 후보 합금 조성을 탐색하고, 물리 제약·OOD 검증·CALPHAD 검증을 거쳐 최종 신합금 후보를 선정한다.
+수명 예측 모델을 기반으로 후보 합금 조성을 탐색하고, 물리 제약·OOD 검증·CALPHAD 검증을 거쳐 최종 신합금 후보를 선정한다.
 
 | 구분               | 내용                                                                                           |
 | :--------------- | :------------------------------------------------------------------------------------------- |
 | 모델 연동            | `models/transformer_tree_ensemble.pkl`을 사용해 후보 조성의 예측 수명 계산                                  |
 | 탐색 원소            | `C`, `Si`, `Mn`, `Cr`, `Mo`, `W`, `Ni`, `V`, `Nb`, `N`, `B`                                  |
-| 고정 원소            | `P`, `S`, `O`, `Al`은 고정값으로 처리                                                                |
+| 고정 원소            | `P`, `S`, `O`는 불순물로 고정하고, `Al`은 현재 설계 대상이 아니므로 고정값으로 처리                                                                |
 | 제한/제외 원소         | `Co`, `Ta`, `Re`, `Cu`는 데이터 희박성, 비용, 설계 범위 문제로 0 또는 제한값으로 관리                                 |
-| Fe 처리            | `Fe`는 직접 최적화하지 않고 전체 조성의 balance로 계산                                                         |
+| Fe 처리            | 전체 조성의 balance로 계산                                                         |
 | 물리 제약            | `KN`, `Ms temperature`, `Laves risk`, `Z-phase risk`, `CEQ`, `MX balance` 등을 계산하여 비현실적 조성 억제 |
 | OOD 검증           | Mahalanobis distance를 이용해 학습 데이터 분포 밖 후보 여부 확인                                               |
 | OOD 기준 파일        | `data/ood_reference.pkl`                                                                     |
@@ -116,8 +116,9 @@ GA 모듈은 수명 예측 모델을 기반으로 후보 합금 조성을 탐색
 | 최적화 기준           | 물리야금학적 타당성 확보 → 예측 수명 최대화 → 재료 비용 최소화                                                        |
 | 조성 보정            | 교차·변이 후 원소 범위, 총합금량, `Fe balance`를 만족하도록 repair 수행                                           |
 | 결과 저장            | `ga/best_alloy.json`, `ga/best_alloy.csv`, `ga/pareto_top10.json`, `ga/pareto_top10.csv` 생성  |
-| 결과 포함 항목         | 최종 조성 wt%, 예측 수명, 재료비 index, 물리 penalty, OOD distance, CALPHAD phase fraction                |
- 
+
+결과 파일에는 최종 조성 wt%, 예측 수명, 재료비 index, 물리 penalty, OOD distance, CALPHAD phase fraction이 포함된다.
+```
 
 ---
 
