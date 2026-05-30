@@ -9,11 +9,15 @@
 ```
 vertex/
 ├── data/
-│   ├── taka.xlsx              # 원본 데이터 (2066행 × 31열)
-│   ├── creep.csv              # 추가 크립 데이터 (1024행 × 42열)
-│   ├── creep_data.csv         # 추가 크립 데이터 (265행 × 25열)
-│   ├── preprocessor.pkl       # 저장된 StandardScaler + 피처 메타정보
+│   ├── taka.xlsx               # 원본 데이터 (2066행 × 31열)
+│   ├── creep.csv               # 추가 크립 데이터 (1024행 × 42열)
+│   ├── creep_data.csv          # 추가 크립 데이터 (265행 × 25열)
+│   ├── preprocessor.pkl        # 저장된 StandardScaler + 피처 메타정보
 │   └── correlation_heatmap.png # 전처리 결과 변수 간 상관관계 히트맵
+│   ├── ood_reference.pkl       # Mahalanobis OOD 검증 기준 파일
+│   ├── seed_cache.json         # LLM 초기 조성 seed cache
+│   └── thermo/
+│       └── fe_thermo.tdb       # CALPHAD phase validation용 Fe계 열역학 DB
 ├── documents/
 │   └── 회의록.md               # 팀 프로젝트 진행 기록
 ├── models/
@@ -21,13 +25,18 @@ vertex/
 │   └── LMP_데이터증강.py       # LMP 기반 데이터 증강
 ├── ga/                        
 │   ├── __init__.py            
-│   ├── config.py              # 전체 설정 관리
-│   ├── physics.py             # 물리 제약 및 penalty 계산
-│   ├── llm.py                 # 초기 seed 생성
-│   └── engine.py              # GA 최적화 실행
+│   ├── config.py               # GA 탐색 범위, 비용, OOD, CALPHAD 등 전체 설정
+│   ├── physics.py              # 물리야금학적 제약 및 penalty 계산
+│   ├── llm.py                  # LLM seed / cache seed 기반 초기 후보 생성
+│   ├── ood_analysis.py         # OOD 거리 계산 및 기여 원소 분석
+│   ├── engine.py               # GA 최적화 실행 및 결과 저장
+├── tools/
+│   ├── build_ood_reference.py # OOD reference 생성 스크립트
+│   └── build_ood.py           # OOD 관련 보조 생성 스크립트
 ├── data_preprocessing.py      # 이전 데이터 전처리 및 피처 엔지니어링
 ├── 데이터전처리.py             # 추가된 데이터셋 병합 및 데이터 전처리
-├── app.py           # Streamlit 기반 웹 애플리케이션 실행 파일
+├── web/
+│   ├── app.py                 # 웹 애플리케이션 실행 파일
 ├── requirements.txt           # 프로젝트 라이브러리 의존성 목록
 └── README.md                  # 본 문서
 ```
@@ -83,62 +92,33 @@ vertex/
   - 온도 증가 시 예측 수명이 감소하는 경향 확인
   - 고온 조건에서 응력 증가 시 예측 수명이 감소하는 경향 확인
   - 운전 가혹도 지수가 증가할수록 예측 수명이 감소하는 음의 상관 확인
----
 
 ### 3. GA 최적화 (`ga/`)
 
-- 예측 모델 연동:
-  * `models/transformer_tree_ensemble.pkl`로 GA 후보 조성의 예측 수명 계산
-  * 모델 입력 feature는 학습 artifact에 저장된 feature schema를 기준으로 구성
+GA 모듈은 수명 예측 모델을 기반으로 후보 합금 조성을 탐색하고, 물리 제약·OOD 검증·CALPHAD 검증을 거쳐 최종 신합금 후보를 선정한다.
 
-- 탐색 변수 정의:
-  * GA가 직접 조절할 주요 합금 원소 11개 선정: C, Si, Mn, Cr, Mo, W, Ni, V, Nb, N, B
-  * 불순물 또는 현재 설계 대상에서 제외한 원소는 고정값 처리: `P, S, O, Al`
-  * `Co, Ta, Re, Cu` 등 데이터 희박성·비용·설계 범위 문제를 가진 원소는 기본적으로 0 또는 제한값으로 관리
-  * Fe는 직접 최적화하지 않고, 전체 조성 합에서 balance로 계산
+| 구분               | 내용                                                                                           |
+| :--------------- | :------------------------------------------------------------------------------------------- |
+| 모델 연동            | `models/transformer_tree_ensemble.pkl`을 사용해 후보 조성의 예측 수명 계산                                  |
+| 탐색 원소            | `C`, `Si`, `Mn`, `Cr`, `Mo`, `W`, `Ni`, `V`, `Nb`, `N`, `B`                                  |
+| 고정 원소            | `P`, `S`, `O`, `Al`은 고정값으로 처리                                                                |
+| 제한/제외 원소         | `Co`, `Ta`, `Re`, `Cu`는 데이터 희박성, 비용, 설계 범위 문제로 0 또는 제한값으로 관리                                 |
+| Fe 처리            | `Fe`는 직접 최적화하지 않고 전체 조성의 balance로 계산                                                         |
+| 물리 제약            | `KN`, `Ms temperature`, `Laves risk`, `Z-phase risk`, `CEQ`, `MX balance` 등을 계산하여 비현실적 조성 억제 |
+| OOD 검증           | Mahalanobis distance를 이용해 학습 데이터 분포 밖 후보 여부 확인                                               |
+| OOD 기준 파일        | `data/ood_reference.pkl`                                                                     |
+| OOD 사용 원소        | `C`, `Si`, `Mn`, `Cr`, `Mo`, `W`, `Ni`, `V`, `Nb`, `N`, `B`                                  |
+| CALPHAD 검증       | `pycalphad`와 `data/thermo/fe_thermo.tdb`를 이용해 후보 조성의 phase fraction 확인                       |
+| CALPHAD 확인 phase | `BCC_A2`, `FCC_A1`, `LAVES_PHASE`, `SIGMA`, `M23C6`, `M6C`                                   |
+| LLM seed         | Gemini API 또는 `data/seed_cache.json`을 이용해 초기 후보 조성 seed 생성                                   |
+| Seed 검증          | 조성 범위, 총합금량, 물리 penalty 기준을 통과한 seed만 초기 population에 반영                                      |
+| 최적화 방식           | DEAP 기반 NSGA-II 사용                                                                           |
+| 최적화 기준           | 물리야금학적 타당성 확보 → 예측 수명 최대화 → 재료 비용 최소화                                                        |
+| 조성 보정            | 교차·변이 후 원소 범위, 총합금량, `Fe balance`를 만족하도록 repair 수행                                           |
+| 결과 저장            | `ga/best_alloy.json`, `ga/best_alloy.csv`, `ga/pareto_top10.json`, `ga/pareto_top10.csv` 생성  |
+| 결과 포함 항목         | 최종 조성 wt%, 예측 수명, 재료비 index, 물리 penalty, OOD distance, CALPHAD phase fraction                |
+ 
 
-- 물리 기반 제약 조건 반영:
-  * 9–12Cr ferritic/martensitic steel 설계 범위를 기준으로 KN 계수, Ms temperature, Laves phase 위험도, Z-phase 위험도, CEQ, MX balance를 계산
-  * 각 지표가 기준값을 초과하거나 미달할 경우 연속 penalty를 부여하여 비현실적 조성 억제
-  * 총합금량 제한 및 원소 단가 기반 재료비 index를 함께 계산
-
-- Mahalanobis OOD penalty:
-  * GA가 학습 데이터 분포 밖의 조성을 선택하는 문제를 줄이기 위함
-  * OOD reference는 `data/ood_reference.pkl`에서 로드하며,
-   reference가 없을 경우 OOD penalty가 조용히 꺼지지 않도록 실행 단계에서 확인
-  * 현재 OOD 기준은 GA 최종 설계 대상인 Fe계 9–12Cr 조성 영역과 대응되는 `taka.xlsx` 기반 조성 분포를 사용
-  * 사용 feature: C, Si, Mn, Cr, Mo, W, Ni, V, Nb, N, B
-
-- CALPHAD 기반 상 안정성 검증:
-  * pycalphad와 Fe계 TDB 파일(`data/thermo/fe_thermo.tdb`)을 사용하여 후보 조성의 제한적 상평형 계산 수행
-  * 계산 대상 phase: `BCC_A2`, `FCC_A1`, `LAVES_PHASE`, `SIGMA`, `M23C6`, `M6C`
-  * Laves phase, Sigma phase, FCC_A1, M6C가 기준 이상 형성될 경우 CALPHAD penalty를 부여
-  * BCC_A2와 M23C6는 Fe계 내열강에서 주요 기지상/탄화물로 해석 가능하므로 주로 기록 및 해석용으로 사용
-
-- LLM 기반 초기 seed 생성:
-  * Gemini API를 사용하여 Fe계 9–12Cr 내열강 설계 범위에 맞는 초기 후보 조성 seed 생성
-  * API 호출 결과는 `data/seed_cache.json`에 저장하여 재사용 가능
-  * LLM seed는 그대로 사용하지 않고, 조성 범위·총합금량·물리 penalty 기준을 통과한 seed만 GA 초기 population에 반영
-  * seed 부족 상황에 대비하여 strict mode 및 cache 기반 fallback 구조를 사용
-
-- 다목적 최적화:
-  * DEAP 기반 NSGA-II 적용
-  * 최적화 목표:
-    1. 물리 기반 위험도 최소화
-    2. 예측 수명 최대화
-    3. 재료 비용 최소화
-  * 물리 기반 위험도에는 heuristic metallurgy penalty, Mahalanobis OOD penalty, elemental OOD penalty가 포함됨
-  * CALPHAD 검증은 계산 비용을 고려하여 최종 Pareto Top 10 후보에 대해 후처리 검증으로 수행
-
-- 합금 조성 보정 장치:
-  * 교차/변이 이후 개별 원소 범위와 전체 합금량 제한을 만족하도록 repair 로직 적용
-  * Fe balance가 음수가 되거나 총합금량 제한을 초과하는 후보를 방지
-  * GA 탐색 중 물리적으로 불가능한 조성이 누적되지 않도록 후보 조성을 지속적으로 보정
-
-- 결과 저장:
-  * 최종 추천 조성 저장: `ga/best_alloy.json`
-  * Pareto 후보 Top 10 저장: `ga/pareto_top10.json`, `ga/pareto_top10.csv`
-  * 저장 결과에는 예측 수명, 재료비, 물리 penalty, OOD distance, CALPHAD phase fraction, 최종 조성 wt%가 포함됨
 ---
 
 ## 🛠 기술 스택
