@@ -12,3 +12,4 @@ matplotlib
 deap
 python-dotenv
 google-generativeai
+pycalphad
