@@ -33,17 +33,15 @@ load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
-    """
-    .env의 true/false 값을 안전하게 bool로 변환합니다.
-    """
     raw = os.environ.get(name, str(default)).strip().lower()
     return raw in {"1", "true", "yes", "y", "on"}
 
 
 USE_LLM_API = _env_flag("USE_LLM_API", default=False)
 FORCE_LLM_REFRESH = _env_flag("FORCE_LLM_REFRESH", default=False)
+STRICT_LLM_SEED_MODE = _env_flag("STRICT_LLM_SEED_MODE", default=True) 
 
-CACHE_SEED_PATH = DATA_DIR / "cached_llm_seeds_ferritic_v2.json"
+CACHE_SEED_PATH = DATA_DIR / "seed_cache.json"
 SAMPLE_SEED_PATH = DATA_DIR / "sample_seeds.json"
 
 
@@ -52,9 +50,6 @@ SAMPLE_SEED_PATH = DATA_DIR / "sample_seeds.json"
 # ============================================================
 
 def _robust_json_parser(text: str) -> str:
-    """
-    Gemini 응답에서 JSON array만 안전하게 추출합니다.
-    """
 
     if not text:
         return "[]"
@@ -84,8 +79,7 @@ def _robust_json_parser(text: str) -> str:
 
 def _normalize_seed_composition(raw_comp: dict) -> dict:
     """
-    raw seed를 FULL_COMPOSITION_FEATURES 19개 기준으로 정규화합니다.
-
+    raw seed를 FULL_COMPOSITION_FEATURES 19개 기준으로 정규화함.
     원칙:
     - seed는 DESIGN_VARIABLES 11개만 가져도 됨
     - P/S/O/Co/Re/Al/Cu/Ta는 FIXED_ELEMENTS에서 자동 삽입
@@ -109,7 +103,7 @@ def _normalize_seed_composition(raw_comp: dict) -> dict:
 
 def _is_within_element_bounds(full_comp: dict) -> tuple[bool, str]:
     """
-    DESIGN_VARIABLES가 FERRITIC_SYSTEM_LIMITS 범위 안에 있는지 확인합니다.
+    DESIGN_VARIABLES가 FERRITIC_SYSTEM_LIMITS 범위 안에 있는지 확인함.
     """
 
     for elem in DESIGN_VARIABLES:
@@ -131,7 +125,6 @@ def _is_within_element_bounds(full_comp: dict) -> tuple[bool, str]:
 def _is_within_total_alloy_limit(full_comp: dict) -> tuple[bool, str]:
     """
     전체 합금 원소 총합 제한 확인.
-    FIXED_ELEMENTS까지 포함합니다.
     """
 
     total_alloy = sum(full_comp.values())
@@ -147,10 +140,7 @@ def _is_within_total_alloy_limit(full_comp: dict) -> tuple[bool, str]:
 
 def _is_physics_reasonable(full_comp: dict) -> tuple[bool, str]:
     """
-    physics.py의 evaluate_physics()로 seed 1차 검증.
-
-    초기 seed 필터는 너무 강하면 안 됩니다.
-    명백히 위험한 seed만 제거합니다.
+    physics.py의 evaluate_physics()로 seed 1차 검증 (위험한 seed만 제거)
     """
 
     physics_result = evaluate_physics(
@@ -534,20 +524,29 @@ def _configure_gemini_api():
 # ============================================================
 # [7] Gemini API Seed Generation
 # ============================================================
-
 def _generate_seeds_with_gemini() -> list[dict]:
     """
-    Gemini API를 실제 호출하여 seed를 생성합니다.
-
-    이 함수는 get_expert_seeds() 내부에서
-    USE_LLM_API=true AND FORCE_LLM_REFRESH=true일 때만 호출됩니다.
+    Gemini API를 호출하여 seed를 생성함.
     """
 
     genai = _configure_gemini_api()
 
+    target_count = int(LLM_CONFIG.get("SEED_COUNT", 10))
+    batch_size = int(LLM_CONFIG.get("BATCH_SIZE", 10))
+
+    if batch_size <= 0:
+        batch_size = 10
+
+    if batch_size > target_count:
+        batch_size = target_count
+
     print(
         f"[API] {LLM_CONFIG['MODEL_NAME']} 통신 준비 중 "
         f"(FORCE_LLM_REFRESH=true)"
+    )
+    print(
+        f"[API] 목표 LLM seed {target_count}개를 "
+        f"{batch_size}개씩 나누어 생성합니다."
     )
 
     bounds_str = "\n".join([
@@ -567,8 +566,35 @@ def _generate_seeds_with_gemini() -> list[dict]:
         "for genetic algorithm seeding."
     )
 
-    user_prompt = f"""
-Generate {LLM_CONFIG['SEED_COUNT']} unique, physically realistic ferritic-martensitic steel seed compositions.
+    model = genai.GenerativeModel(
+        model_name=LLM_CONFIG["MODEL_NAME"],
+        system_instruction=system_instruction
+    )
+
+    max_retries = 3
+    retry_delay = 10
+    temperature = float(LLM_CONFIG.get("TEMPERATURE", 0.2))
+
+    final_seeds = []
+    seen_keys = set()
+
+    def _seed_key(seed: dict) -> tuple:
+        comp = seed.get("composition", {})
+        return tuple(
+            round(float(comp.get(elem, 0.0)), 6)
+            for elem in DESIGN_VARIABLES
+        )
+
+    batch_index = 0
+
+    while len(final_seeds) < target_count:
+        batch_index += 1
+
+        remaining = target_count - len(final_seeds)
+        current_batch_count = min(batch_size, remaining)
+
+        user_prompt = f"""
+Generate exactly {current_batch_count} unique, physically realistic ferritic-martensitic steel seed compositions.
 
 IMPORTANT DESIGN RULES:
 1. Generate values ONLY for the following DESIGN_VARIABLES:
@@ -621,87 +647,116 @@ Required JSON shape:
 ]
 """
 
-    model = genai.GenerativeModel(
-        model_name=LLM_CONFIG["MODEL_NAME"],
-        system_instruction=system_instruction
-    )
+        batch_success = False
+        last_error = None
 
-    max_retries = 3
-    retry_delay = 10
-    temperature = LLM_CONFIG.get("TEMPERATURE", 0.2)
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            print(f"[API] 생성 요청 시도 {attempt}/{max_retries}...")
-
+        for attempt in range(1, max_retries + 1):
             try:
-                response = model.generate_content(
-                    user_prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        response_mime_type="application/json",
-                        max_output_tokens=8192,
-                        temperature=temperature
-                    ),
-                    request_options={
-                        "timeout": 60
-                    }
+                print(
+                    f"[API] batch {batch_index} 생성 요청 "
+                    f"{attempt}/{max_retries} "
+                    f"({current_batch_count}개 요청)"
                 )
 
-            except Exception as api_err:
-                print(f"[Warning] Strict JSON GenerationConfig 실패: {api_err}")
-                print("[Warning] 일반 generation_config로 재시도합니다.")
+                try:
+                    response = model.generate_content(
+                        user_prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            response_mime_type="application/json",
+                            max_output_tokens=8192,
+                            temperature=temperature,
+                        ),
+                        request_options={
+                            "timeout": 60
+                        }
+                    )
 
-                response = model.generate_content(
-                    user_prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        max_output_tokens=8192,
-                        temperature=temperature
-                    ),
-                    request_options={
-                        "timeout": 60
-                    }
+                except Exception as api_err:
+                    print(f"[Warning] Strict JSON GenerationConfig 실패: {api_err}")
+                    print("[Warning] 일반 generation_config로 재시도합니다.")
+
+                    response = model.generate_content(
+                        user_prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            max_output_tokens=8192,
+                            temperature=temperature,
+                        ),
+                        request_options={
+                            "timeout": 60
+                        }
+                    )
+
+                raw_text = response.text.strip()
+                clean_text = _robust_json_parser(raw_text)
+
+                try:
+                    raw_data = json.loads(clean_text)
+                except json.JSONDecodeError as json_err:
+                    preview = clean_text[:1000]
+                    raise RuntimeError(
+                        "Gemini 응답 JSON 파싱 실패\n"
+                        f"- batch: {batch_index}\n"
+                        f"- attempt: {attempt}\n"
+                        f"- error: {json_err}\n"
+                        f"- preview:\n{preview}"
+                    ) from json_err
+
+                raw_seeds = _extract_seed_list(raw_data)
+
+                if not raw_seeds:
+                    raise RuntimeError(
+                        f"batch {batch_index}에서 seed list를 찾지 못했습니다."
+                    )
+
+                valid_seeds = _validate_and_filter_seeds(raw_seeds)
+
+                accepted_in_batch = 0
+
+                for seed in valid_seeds:
+                    key = _seed_key(seed)
+
+                    if key in seen_keys:
+                        continue
+
+                    seen_keys.add(key)
+                    final_seeds.append(seed)
+                    accepted_in_batch += 1
+
+                    if len(final_seeds) >= target_count:
+                        break
+
+                print(
+                    f"[API] batch {batch_index} 완료: "
+                    f"검증 통과 신규 seed {accepted_in_batch}개 / "
+                    f"누적 {len(final_seeds)}/{target_count}개"
                 )
 
-            raw_text = response.text.strip()
-            clean_text = _robust_json_parser(raw_text)
+                batch_success = True
+                break
 
-            try:
-                raw_seeds = json.loads(clean_text)
-            except json.JSONDecodeError as je:
-                raise ValueError(
-                    f"JSON 파싱 실패: {je}\n"
-                    f"응답 텍스트 일부: {clean_text[:500]}"
-                )
+            except Exception as e:
+                last_error = e
+                print(f"[Warning] batch {batch_index} 실패: {e}")
 
-            if not isinstance(raw_seeds, list) or len(raw_seeds) == 0:
-                raise ValueError("응답이 비어있거나 JSON list 형태가 아닙니다.")
+                if attempt < max_retries:
+                    print(f"[API] {retry_delay}초 후 재시도합니다.")
+                    time.sleep(retry_delay)
 
-            final_seeds = _validate_and_filter_seeds(raw_seeds)
-
-            if not final_seeds:
-                raise ValueError(
-                    "LLM seed가 모두 config/physics 검증에 실패했습니다. "
-                    "프롬프트 또는 제약 조건을 완화해야 합니다."
-                )
-
-            print(
-                f"[LLM] raw seed {len(raw_seeds)}개 중 "
-                f"{len(final_seeds)}개 검증 통과."
+        if not batch_success:
+            raise RuntimeError(
+                f"[LLM-FATAL] Gemini seed batch {batch_index} 생성 실패. "
+                f"마지막 오류: {last_error}"
             )
 
-            return final_seeds
+    if len(final_seeds) < target_count:
+        raise RuntimeError(
+            f"[LLM-FATAL] 목표 seed {target_count}개 중 "
+            f"{len(final_seeds)}개만 확보했습니다."
+        )
 
-        except Exception as e:
-            print(f"[API] 시도 {attempt} 실패: {e}")
+    print(f"[LLM] 최종 Gemini seed {len(final_seeds)}개 확보 완료.")
 
-            if attempt == max_retries:
-                raise RuntimeError(
-                    f"\nLLM API 연동 및 seed 생성에 {max_retries}회 연속 실패했습니다.\n"
-                    f"마지막 에러 메시지: {e}\n"
-                )
-
-            print(f"{retry_delay}초 후 재시도합니다...\n")
-            time.sleep(retry_delay)
+    return final_seeds[:target_count]
 
 
 # ============================================================
@@ -712,55 +767,87 @@ def get_expert_seeds():
     """
     engine.py에서 호출하는 공개 함수.
 
-    규칙:
+    최종 정책:
     - USE_LLM_API=false:
-      API 호출 금지. cache → sample → rule-based seed 순서로 사용.
+      개발 모드입니다. Gemini API를 호출하지 않고 cache → sample → rule-based seed를 사용합니다.
+      단, seed가 0개이면 즉시 중단합니다.
 
     - USE_LLM_API=true, FORCE_LLM_REFRESH=false:
-      cache가 있으면 cache 사용.
-      cache가 없으면 API 호출하지 않고 local seed 사용.
+      검증된 cache seed만 사용합니다.
+      cache가 없으면 STRICT_LLM_SEED_MODE 값에 따라 동작합니다.
+        * STRICT_LLM_SEED_MODE=true  : 즉시 중단
+        * STRICT_LLM_SEED_MODE=false : local/rule-based seed fallback 허용
 
     - USE_LLM_API=true, FORCE_LLM_REFRESH=true:
-      이때만 Gemini API 호출.
-      성공 결과를 cache 파일로 저장.
+      Gemini API를 실제 호출합니다.
+      API 호출, JSON 파싱, seed 검증 중 하나라도 실패하면 즉시 중단합니다.
     """
 
     print(
         f"[LLM] USE_LLM_API={USE_LLM_API}, "
-        f"FORCE_LLM_REFRESH={FORCE_LLM_REFRESH}"
+        f"FORCE_LLM_REFRESH={FORCE_LLM_REFRESH}, "
+        f"STRICT_LLM_SEED_MODE={STRICT_LLM_SEED_MODE}"
     )
 
     # --------------------------------------------------------
-    # 개발 모드: API 절대 호출 금지
+    # [1] 개발 모드: 사용자가 명시적으로 API를 끈 경우에만 local seed 허용
     # --------------------------------------------------------
-
     if not USE_LLM_API:
-        print("[LLM] 개발 모드: Gemini API를 호출하지 않습니다.")
-        return _load_local_or_rule_based_seeds()
+        print("[LLM] 개발 모드: Gemini API를 호출하지 않고 local/rule-based seed를 사용합니다.")
+
+        seeds = _load_local_or_rule_based_seeds()
+
+        if not seeds:
+            raise RuntimeError(
+                "[LLM-FATAL] 개발 모드 seed 생성 실패: "
+                "cache/sample/rule-based seed가 모두 비어 있습니다."
+            )
+
+        return seeds
 
     # --------------------------------------------------------
-    # API 사용 모드지만 refresh가 아니면 cache만 사용
+    # [2] API 사용 모드 + refresh 아님: cache만 우선 허용
     # --------------------------------------------------------
-
     if USE_LLM_API and not FORCE_LLM_REFRESH:
         cached = _load_seed_file(CACHE_SEED_PATH)
 
         if cached:
-            print("[LLM] cache seed 사용. Gemini API를 호출하지 않습니다.")
+            print("[LLM] 검증된 cache seed를 사용합니다. Gemini API를 새로 호출하지 않습니다.")
             return cached
 
+        if STRICT_LLM_SEED_MODE:
+            raise RuntimeError(
+                "[LLM-FATAL] USE_LLM_API=true이지만 검증된 cache seed가 없습니다. "
+                "STRICT_LLM_SEED_MODE=true이므로 local/rule-based seed로 대체하지 않습니다. "
+                "해결 방법: FORCE_LLM_REFRESH=true로 Gemini API를 실제 호출하거나, "
+                "개발용 실행이면 USE_LLM_API=false로 명시하십시오."
+            )
+
         print(
-            "[LLM] USE_LLM_API=true지만 FORCE_LLM_REFRESH=false이고 "
-            "cache가 없습니다. API를 호출하지 않고 local seed를 사용합니다."
+            "[LLM-WARNING] USE_LLM_API=true이지만 cache가 없습니다. "
+            "STRICT_LLM_SEED_MODE=false이므로 local/rule-based seed로 fallback합니다. "
+            "이 결과는 Gemini API 신규 호출 결과가 아닙니다."
         )
 
-        return _load_local_or_rule_based_seeds()
+        seeds = _load_local_or_rule_based_seeds()
+
+        if not seeds:
+            raise RuntimeError(
+                "[LLM-FATAL] fallback seed 생성 실패: "
+                "cache/sample/rule-based seed가 모두 비어 있습니다."
+            )
+
+        return seeds
 
     # --------------------------------------------------------
-    # 실제 API 호출
+    # [3] API 실제 호출 모드: 실패 시 _generate_seeds_with_gemini()가 RuntimeError 발생
     # --------------------------------------------------------
-
     final_seeds = _generate_seeds_with_gemini()
+
+    if not final_seeds:
+        raise RuntimeError(
+            "[LLM-FATAL] Gemini API 호출은 완료됐지만 검증을 통과한 seed가 0개입니다."
+        )
 
     _save_seed_file(
         CACHE_SEED_PATH,

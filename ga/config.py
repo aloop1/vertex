@@ -134,10 +134,20 @@ METALLURGICAL_CONSTRAINTS = {
 # [10] OOD
 # ============================================================
 OOD_CONFIG = {
-    'ENABLE_OOD_PENALTY': True,
-    'OOD_DISTANCE_THRESHOLD': 3.0,
-    'OOD_PENALTY_WEIGHT': 0.25,
-    'USE_MAHALANOBIS': True
+    "ENABLE_OOD_PENALTY": True,
+    "USE_MAHALANOBIS": True,
+
+    "REQUIRE_OOD_REFERENCE": True,
+
+    "REFERENCE_PATH": str(DATA_DIR / "ood_reference.pkl"),
+
+    "REFERENCE_FEATURES": DESIGN_VARIABLES,
+
+    "OOD_DISTANCE_THRESHOLD": 3.0,
+    "OOD_PENALTY_WEIGHT": 0.25,
+
+    "OOD_QUANTILE": 0.95,
+    "COV_REGULARIZATION": 1e-6,
 }
 
 # ============================================================
@@ -145,9 +155,9 @@ OOD_CONFIG = {
 # ============================================================
 LLM_CONFIG = {
     'MODEL_NAME': 'gemini-2.5-flash',
-    'SEED_COUNT': 10,
 
-    # Conservative generation for metallurgy plausibility
+    'SEED_COUNT': 30,
+    'BATCH_SIZE': 10,
     'TEMPERATURE': 0.2,
 
     'SYSTEM_PROMPT_TEMPLATE': """
@@ -178,7 +188,7 @@ LLM_CONFIG = {
 SEARCH_POLICY = {
 
     # initialization
-    'INITIAL_POPULATION_SIZE': 100,
+    'INITIAL_POPULATION_SIZE': 300,
     'LLM_SEED_RATIO': 0.3,
 
     # diversity control
@@ -189,4 +199,62 @@ SEARCH_POLICY = {
 
     # elitism
     'ELITE_RATIO': 0.10,
+}
+
+# ============================================================
+# [13] Thermodynamic CALPHAD configuration
+# ============================================================
+
+THERMO_CONFIG = {
+    "ENABLE_THERMO_CALC": True,
+    "TDB_PATH": str(DATA_DIR / "thermo" / "fe_thermo.tdb"),
+
+    "CALPHAD_ELEMENTS": [
+    "Fe",
+    "C",
+    "Cr",
+    "Mo",
+    "W",
+    "V",
+    "Nb",
+    "N",
+    "Mn",
+    "Si",
+    "Ni",
+    ],
+
+    "TARGET_PHASES": [
+        "BCC_A2",
+        "FCC_A1",
+        "LAVES_PHASE",
+        "SIGMA",
+        "M23C6",
+        "M6C",
+    ],
+
+    # 위험상 기준
+    "MAX_LAVES_FRACTION": 0.03,
+    "MAX_SIGMA_FRACTION": 0.01,
+
+    # 페라이트/마르텐사이트계에서 FCC가 지나치게 안정하면 위험 신호로 봄
+    "MAX_FCC_FRACTION": 0.05,
+
+    # M6C는 Mo/W-rich carbide로 과다하면 장기 안정성 위험으로 약하게 감점
+    "MAX_M6C_FRACTION": 0.05,
+
+    "THERMO_PENALTY_WEIGHT": 10.0,
+
+    # 계산 실패 시 0점 처리하면 오히려 실패 후보가 이득을 봄
+    "THERMO_FAILURE_PENALTY": 100.0,
+
+    # 발표 전 개발 중에는 False 권장.
+    # 완전히 검증한 뒤 True로 바꿔도 됨.
+    "STRICT_THERMO_MODE": False,
+
+    # GA 중 같은 조성이 반복될 때 계산 재사용
+    "USE_THERMO_CACHE": True,
+
+        # GA 탐색 중에는 CALPHAD를 끄고, 최종 후보 검증에서만 사용
+    "APPLY_THERMO_DURING_GA": False,
+    "APPLY_THERMO_TO_TOP_CANDIDATES": True,
 }
