@@ -240,12 +240,75 @@ def predict():
             },
         })
 
+    # ── GA 결과 로드 및 sweep 실행 ───────────────────────────────────────────
+    ga_data: dict = {"best": None, "candidates": [], "meta": {}, "sweep": None}
+
+    best_path  = PROJECT_ROOT / "ga" / "best_alloy.json"
+    pareto_path = PROJECT_ROOT / "ga" / "pareto_top30.json"
+
+    if best_path.exists():
+        try:
+            with open(best_path, encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and "best" in raw:
+                ga_data["best"] = raw["best"]
+                ga_data["meta"] = {k: v for k, v in raw.items() if k != "best"}
+            else:
+                ga_data["best"] = raw
+        except Exception:
+            pass
+
+    if pareto_path.exists():
+        try:
+            with open(pareto_path, encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, list):
+                ga_data["candidates"] = raw[:5]
+            elif isinstance(raw, dict):
+                ga_data["candidates"] = raw.get("candidates", [])[:5]
+                if not ga_data["meta"]:
+                    ga_data["meta"] = {k: v for k, v in raw.items() if k != "candidates"}
+        except Exception:
+            pass
+
+    if ga_data["best"]:
+        try:
+            b = ga_data["best"]
+            ga_prod_feat = {elem: float(b.get(elem, 0.0)) for elem in _ALL_COMP}
+            ga_ht_feat   = {col:  float(b.get(col,  0.0)) for col  in _HT_COLS}
+            ga_fixed = _fixed_features({**ga_prod_feat, **ga_ht_feat})
+
+            ga_ts = _predict_batch(ga_fixed, np.full(80, fixed_stress), temps)
+            ga_ss = _predict_batch(ga_fixed, stresses, np.full(80, fixed_temp))
+
+            ga_comp_nz = {c: round(float(b.get(c, 0.0)), 4)
+                          for c in _ALL_COMP if float(b.get(c, 0.0)) > 0}
+            ga_fe_bal  = round(max(0.0, 100.0 - sum(ga_comp_nz.values())), 3)
+            ga_comp_pie = {"Fe (bal.)": ga_fe_bal, **ga_comp_nz} if ga_fe_bal > 0 else dict(ga_comp_nz)
+
+            ga_data["sweep"] = {
+                "temp_sweep":  {
+                    "temps_k":     temps.tolist(),
+                    "temps_c":     (temps - 273.15).tolist(),
+                    "log10_hours": ga_ts.tolist(),
+                },
+                "stress_sweep": {
+                    "stresses_mpa": stresses.tolist(),
+                    "log10_hours":  ga_ss.tolist(),
+                },
+                "comp_pie": ga_comp_pie,
+                "composition": ga_comp_nz,
+            }
+        except Exception as e:
+            print(f"[GA sweep] {e}")
+
     rd = {
         "products":     product_data,
         "fixed_stress": fixed_stress,
         "fixed_temp":   fixed_temp,
         "temp_min":     temp_min,   "temp_max":  temp_max,
         "stress_min":   stress_min, "stress_max": stress_max,
+        "ga":           ga_data,
     }
     return _RESULT_TMPL.replace("__DATA_JSON__", json.dumps(rd, ensure_ascii=False))
 
@@ -760,6 +823,25 @@ header h1{font-size:1.2rem;color:#7eb8f7;font-weight:700}
 .ht-bar.N{background:linear-gradient(90deg,#1a3a5c,#7eb8f7)}
 .ht-bar.T{background:linear-gradient(90deg,#3a1a1a,#f76b6b)}
 .ht-bar.A{background:linear-gradient(90deg,#1a3a1a,#6bf7c6)}
+/* GA section */
+.ga-layout{display:flex;gap:18px;align-items:stretch;margin-top:4px}
+@media(max-width:900px){.ga-layout{flex-direction:column}}
+.ga-card-box{flex:0 0 280px;min-width:0;display:flex;flex-direction:column}
+.ga-card-title{font-size:.7rem;font-weight:700;color:#7eb8f7;letter-spacing:.07em;text-transform:uppercase;margin-bottom:8px}
+.ga-life-num{font-size:2rem;font-weight:800;color:#6bf7c6;letter-spacing:-.02em;margin-bottom:2px}
+.ga-life-sub{font-size:.8rem;color:#8898aa;margin-bottom:14px}
+.ga-stats{display:flex;flex-direction:column;gap:5px;margin-bottom:4px}
+.ga-stat{display:flex;justify-content:space-between;font-size:.82rem}
+.ga-stat .lbl{color:#8898aa}.ga-stat .val{font-weight:600;color:#e0e0e0}
+.ga-stat .val.ok{color:#6bf7c6}.ga-stat .val.warn{color:#f7e06b}.ga-stat .val.bad{color:#f76b6b}
+.ga-bar-row{margin-bottom:6px}
+.ga-bar-label{display:flex;justify-content:space-between;font-size:.75rem;margin-bottom:2px;color:#8898aa}
+.ga-bar-label span:last-child{color:#c0c8d8}
+.ga-bar-bg{background:#12172a;border-radius:3px;height:6px;overflow:hidden}
+.ga-bar-fill{height:100%;border-radius:3px}
+.ga-bar-fill.ok{background:#6bf7c6}.ga-bar-fill.warn{background:#f7e06b}.ga-bar-fill.bad{background:#f76b6b}
+.ga-meta-bar{font-size:.75rem;color:#5a6a88;margin-top:10px;display:flex;flex-wrap:wrap;gap:12px}
+.ga-meta-bar span{color:#8898aa}.ga-meta-bar strong{color:#7eb8f7}
 /* Loading overlay */
 #lov{position:fixed;inset:0;background:rgba(8,11,20,.93);z-index:2000;display:none;flex-direction:column;align-items:center;justify-content:center}
 #lov.show{display:flex}
@@ -931,6 +1013,28 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
       </div>
     </div>
   </div>
+</div>
+
+<!-- GA 합금 설계 추천 -->
+<div id="ga-section" style="display:none">
+  <div class="sec">⚗ GA 합금 설계 추천</div>
+  <div class="ga-layout">
+    <div class="ch-box ga-card-box">
+      <div class="ga-card-title">최적 합금 후보</div>
+      <div id="ga-life-num" class="ga-life-num">—</div>
+      <div id="ga-life-sub" class="ga-life-sub">—</div>
+      <div class="ga-stats" id="ga-stats"></div>
+      <div class="ga-card-title" style="margin-top:16px">조성 (wt%)</div>
+      <div class="pills" id="ga-pills"></div>
+      <div class="ga-card-title" style="margin-top:16px">상 안정성 (CALPHAD)</div>
+      <div id="ga-phases"></div>
+    </div>
+    <div class="ch-box" style="min-width:0;flex:1">
+      <div class="ch-sub">온도별 수명 비교 (고정 응력 기준)</div>
+      <div id="ch-ga-comp" style="height:320px"></div>
+    </div>
+  </div>
+  <div class="ga-meta-bar" id="ga-meta-bar"></div>
 </div>
 
 <!-- Collapsible details -->
@@ -1298,12 +1402,90 @@ function initDashboard(){
   updateDashboard();
 }
 
+function renderGASection(){
+  const ga = RD.ga;
+  if(!ga||!ga.best) return;
+  document.getElementById('ga-section').style.display='';
+  const b=ga.best;
+  function fmt(v,d){if(v==null||v===undefined||isNaN(parseFloat(v)))return'—';return parseFloat(v).toFixed(d!=null?d:3);}
+  function fmtHrs(log10){if(log10==null)return'—';const h=Math.pow(10,parseFloat(log10));if(h>87600)return(h/8760).toFixed(0)+'년';if(h>1000)return(h/1000).toFixed(1)+'k h';return h.toFixed(0)+' h';}
+  function barCls(v,okMax,warnMax){if(v<=okMax)return'ok';if(v<=warnMax)return'warn';return'bad';}
+  const logL=b.predicted_log_life;
+  const lifeCls=logL>=5||logL>=4?'ok':logL>=3?'warn':'bad';
+  document.getElementById('ga-life-num').textContent=fmtHrs(logL);
+  document.getElementById('ga-life-num').className='ga-life-num '+lifeCls;
+  document.getElementById('ga-life-sub').textContent='log₁₀(수명) = '+fmt(logL,3)+' · GA 최적화 결과';
+  // Stats
+  const costCls=b.material_cost<30?'ok':b.material_cost<60?'warn':'bad';
+  const riskCls=b.physics_risk<10?'ok':b.physics_risk<50?'warn':'bad';
+  const oodTxt=b.ood_is_out_of_distribution===true?'<span class="bad">범위 이탈</span>':b.ood_is_out_of_distribution===false?'<span class="ok">범위 내</span>':'—';
+  const calTxt=b.thermo_success?'<span class="ok">완료</span>':'<span style="color:#8898aa">미수행</span>';
+  document.getElementById('ga-stats').innerHTML=
+    '<div class="ga-stat"><span class="lbl">재료 비용</span><span class="val '+costCls+'">$'+fmt(b.material_cost,2)+'/kg</span></div>'+
+    '<div class="ga-stat"><span class="lbl">물리 위험도</span><span class="val '+riskCls+'">'+fmt(b.physics_risk,2)+'</span></div>'+
+    '<div class="ga-stat"><span class="lbl">OOD 상태</span><span class="val">'+oodTxt+'</span></div>'+
+    '<div class="ga-stat"><span class="lbl">CALPHAD</span><span class="val">'+calTxt+'</span></div>'+
+    '<div class="ga-stat"><span class="lbl">KN</span><span class="val">'+fmt(b.KN,3)+'</span></div>'+
+    '<div class="ga-stat"><span class="lbl">CEQ</span><span class="val">'+fmt(b.CEQ,3)+'</span></div>';
+  // Composition pills
+  const ELEMS=['C','Si','Mn','Cr','Mo','W','Ni','V','Nb','N','B','P','S','Al','Cu','Co','Ta','O','Re'];
+  let pillsHtml='';
+  if(b.Fe_balance&&parseFloat(b.Fe_balance)>0) pillsHtml='<span class="pill"><b>Fe</b> '+fmt(b.Fe_balance,2)+'%</span>';
+  ELEMS.forEach(e=>{const v=b[e];if(v&&parseFloat(v)>0.001) pillsHtml+='<span class="pill"><b>'+e+'</b> '+fmt(v,3)+'%</span>';});
+  document.getElementById('ga-pills').innerHTML=pillsHtml||'—';
+  // Phase bars
+  const phases=[
+    {key:'bcc_fraction',label:'BCC_A2',okMax:.8,warnMax:1.0},
+    {key:'m23c6_fraction',label:'M₂₃C₆',okMax:.05,warnMax:.1},
+    {key:'laves_fraction',label:'Laves',okMax:.02,warnMax:.05},
+    {key:'sigma_fraction',label:'Sigma',okMax:.01,warnMax:.03},
+    {key:'fcc_fraction',label:'FCC',okMax:.05,warnMax:.1},
+  ];
+  let phHtml='';
+  phases.forEach(ph=>{
+    const v=b[ph.key]!=null?parseFloat(b[ph.key]):null;
+    const pct=v!=null?Math.min(v*100,100):0;
+    const cls=v!=null?barCls(v,ph.okMax,ph.warnMax):'';
+    phHtml+='<div class="ga-bar-row"><div class="ga-bar-label"><span>'+ph.label+'</span><span>'+(v!=null?pct.toFixed(2)+'%':'—')+'</span></div><div class="ga-bar-bg"><div class="ga-bar-fill '+cls+'" style="width:'+pct+'%"></div></div></div>';
+  });
+  document.getElementById('ga-phases').innerHTML=phHtml;
+  // Meta bar
+  const meta=ga.meta||{};const cond=meta.conditions||{};
+  const mParts=[];
+  if(meta.generated_at) mParts.push('<span>생성: <strong>'+meta.generated_at+'</strong></span>');
+  if(cond.temp_c!=null) mParts.push('<span>GA 조건 — 온도: <strong>'+cond.temp_c+' °C</strong></span>');
+  if(cond.stress_mpa!=null) mParts.push('<span>응력: <strong>'+cond.stress_mpa+' MPa</strong></span>');
+  if(cond.cost_limit!=null) mParts.push('<span>비용 한도: <strong>$'+cond.cost_limit+'/kg</strong></span>');
+  document.getElementById('ga-meta-bar').innerHTML=mParts.join('');
+  // Comparison chart
+  if(!window.Plotly||!ga.sweep) return;
+  const sw=ga.sweep.temp_sweep;
+  const traces=RD.products.map((p,i)=>({
+    x:p.temp_sweep.temps_k,y:p.temp_sweep.log10_hours,name:p.name,type:'scatter',mode:'lines',
+    line:{color:COLORS[i%COLORS.length],width:1.8,dash:'dot'},
+    hovertemplate:'T=%{x:.0f} K<br>log₁₀=%{y:.3f}<extra>'+p.name+'</extra>'
+  }));
+  traces.push({
+    x:sw.temps_k,y:sw.log10_hours,name:'GA 최적 합금',type:'scatter',mode:'lines',
+    line:{color:'#f7e06b',width:3},
+    hovertemplate:'T=%{x:.0f} K<br>log₁₀=%{y:.3f}<extra>GA 최적 합금</extra>'
+  });
+  Plotly.react('ch-ga-comp',traces,lyt({
+    margin:{l:60,r:20,t:16,b:50},
+    xaxis:{title:'온도 (K)',gridcolor:'#1e2538'},
+    yaxis:{title:'log₁₀(수명 / 시간)',gridcolor:'#1e2538'},
+    legend:{bgcolor:'rgba(0,0,0,0)',bordercolor:'#2a3048',borderwidth:1,orientation:'h',y:-0.2},
+    hovermode:'closest'
+  }),{responsive:true,displayModeBar:false});
+}
+
 function loadPlotlyAndRender(){
   if(window.Plotly){
     PLOTLY_READY = true;
     renderCompositionChart();
     renderThermalCycle();
     initDashboard();
+    renderGASection();
     if(_detOpen){
       _detRendered = true;
       renderTempChart();
@@ -1321,6 +1503,7 @@ function loadPlotlyAndRender(){
     renderCompositionChart();
     renderThermalCycle();
     initDashboard();
+    renderGASection();
     if(_detOpen){
       _detRendered = true;
       renderTempChart();
