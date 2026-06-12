@@ -109,7 +109,7 @@ def _parse_upload(file_storage) -> list[dict]:
     else:
         df.rename(columns={nc: "name"}, inplace=True)
 
-    for col in df.columns:
+    for col in df.columns: 
         if col != "name":
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
