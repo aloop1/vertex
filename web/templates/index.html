@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vertex — 크립 수명 예측</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+<style>
+body{display:flex;align-items:center;justify-content:center;padding:24px}
+.shell{max-width:760px;width:100%}
+.topbar{display:flex;justify-content:flex-end;margin-bottom:14px}
+.hero{margin-bottom:26px}
+.hero h1{font-size:2rem;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+.hero h1 .grad{background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .sub{color:var(--text-dim);font-size:.9rem;line-height:1.7}
+.hero .sub strong{color:var(--text)}
+.err-box{background:color-mix(in srgb,var(--bad) 12%,var(--surface));border:1px solid var(--bad);border-radius:10px;padding:12px 16px;color:var(--bad);font-size:.86rem;margin-bottom:18px}
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:34px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:6px}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.upload-zone label{display:block;width:100%;cursor:pointer}
+.upload-zone input[type=file]{display:none}
+.uz-icon{font-size:2.3rem;margin-bottom:8px}
+.uz-label{font-size:.95rem;color:var(--text);margin-bottom:4px;font-weight:600}
+.uz-hint{font-size:.75rem;color:var(--text-faint)}
+.fname{font-size:.8rem;color:var(--accent);margin-top:6px;min-height:18px;text-align:center}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:640px){.g3{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:4px}
+.lbl{font-size:.78rem;color:var(--text-dim)}
+.hint{font-size:.72rem;color:var(--text-faint);margin-top:3px}
+.submit{margin-top:28px;width:100%}
+.ga-link{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.84rem}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar"><button id="theme-toggle" title="테마 전환">☀</button></div>
+  <div class="card" style="padding:38px 44px">
+    <div class="hero">
+      <h1><span class="vx-brand-mark">V</span><span class="grad">Vertex</span> 크립 수명 예측</h1>
+      <p class="sub">제품 조성·열처리 데이터를 업로드하면 <strong>온도 및 응력 범위별 크립 수명</strong>을 예측합니다.<br>
+      수명(lifetime) 컬럼 없이 구성 데이터만으로 분석 가능합니다.</p>
+      <a class="ga-link" href="/alloy_design">⚗ GA 합금 설계 대시보드 보기 →</a>
+    </div>
+
+    {% if error %}<div class="err-box">⚠ {{ error }}</div>{% endif %}
+
+    <form method="POST" action="/predict" enctype="multipart/form-data">
+      <div class="sec" style="margin-top:0">데이터 파일</div>
+      <div class="upload-zone" id="uz">
+        <label for="fup">
+          <div class="uz-icon">📂</div>
+          <div class="uz-label">클릭하거나 파일을 끌어다 놓으세요</div>
+          <div class="uz-hint">xlsx 또는 csv · 조성·열처리 컬럼 포함 · 수명 컬럼 불필요</div>
+        </label>
+        <input type="file" id="fup" name="file" accept=".xlsx,.csv" required>
+      </div>
+      <div class="fname" id="fname"></div>
+
+      <div class="sec">온도 Sweep 설정</div>
+      <div class="g3">
+        <div class="field">
+          <span class="lbl">최소 온도 (K)</span>
+          <input type="number" name="temp_min" value="700" step="10" min="300" max="2000">
+        </div>
+        <div class="field">
+          <span class="lbl">최대 온도 (K)</span>
+          <input type="number" name="temp_max" value="1200" step="10" min="300" max="2000">
+        </div>
+        <div class="field">
+          <span class="lbl">고정 응력 (MPa)</span>
+          <input type="number" name="fixed_stress" value="150" step="10" min="1" max="1000">
+          <span class="hint">온도 sweep 시 고정값</span>
+        </div>
+      </div>
+
+      <div class="sec">응력 Sweep 설정</div>
+      <div class="g3">
+        <div class="field">
+          <span class="lbl">최소 응력 (MPa)</span>
+          <input type="number" name="stress_min" value="10" step="5" min="1" max="1000">
+        </div>
+        <div class="field">
+          <span class="lbl">최대 응력 (MPa)</span>
+          <input type="number" name="stress_max" value="600" step="10" min="1" max="2000">
+        </div>
+        <div class="field">
+          <span class="lbl">고정 온도 (K)</span>
+          <input type="number" name="fixed_temp" value="873" step="10" min="300" max="2000">
+          <span class="hint">응력 sweep 시 고정값</span>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary submit">▶ &nbsp;수명 예측 실행</button>
+    </form>
+  </div>
+</div>
+<script>
+function suggestParams(file){
+  if(!file) return;
+  var fd=new FormData(); fd.append('file',file);
+  fetch('/suggest_params',{method:'POST',body:fd})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      function set(name,val){
+        if(val===undefined||val===null) return;
+        var el=document.querySelector('[name="'+name+'"]');
+        if(el) el.value=val;
+      }
+      set('temp_min',d.temp_min); set('temp_max',d.temp_max); set('fixed_stress',d.fixed_stress);
+      set('stress_min',d.stress_min); set('stress_max',d.stress_max); set('fixed_temp',d.fixed_temp);
+    })
+    .catch(function(){});
+}
+(function(){
+  var inp=document.getElementById('fup'), uz=document.getElementById('uz');
+  function onFile(f){
+    document.getElementById('fname').textContent=f?f.name:'';
+    suggestParams(f);
+  }
+  inp.addEventListener('change',function(){onFile(this.files[0]);});
+  ['dragenter','dragover'].forEach(function(ev){uz.addEventListener(ev,function(e){e.preventDefault();uz.classList.add('drag');});});
+  ['dragleave','drop'].forEach(function(ev){uz.addEventListener(ev,function(e){e.preventDefault();uz.classList.remove('drag');});});
+  uz.addEventListener('drop',function(e){
+    if(e.dataTransfer.files&&e.dataTransfer.files.length){inp.files=e.dataTransfer.files;onFile(inp.files[0]);}
+  });
+})();
+</script>
+</body>
+</html>

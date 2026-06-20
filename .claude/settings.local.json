@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(git -C \"c:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\" log --oneline -20)",
+      "PowerShell(Start-Process \"c:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\\\\demo.html\")",
+      "PowerShell(cd \"c:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Get-ChildItem -Name | Where-Object {$_ -match \"venv|env|conda|\\\\.venv\"})",
+      "PowerShell(conda info --envs 2>$null)",
+      "PowerShell(pip install torch scikit-learn -q --index-url https://download.pytorch.org/whl/cpu 2>&1)",
+      "PowerShell(pip install torch scikit-learn -q 2>&1)",
+      "PowerShell(pip install xgboost -q 2>&1)",
+      "PowerShell(pip install openpyxl matplotlib seaborn -q 2>&1)",
+      "PowerShell(cd \"c:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process python -ArgumentList \"app.py\" -WindowStyle Normal; Start-Sleep -Seconds 5; try { $r = Invoke-WebRequest -Uri \"http://127.0.0.1:5000\" -UseBasicParsing -TimeoutSec 5; \"서버 응답: HTTP $\\($r.StatusCode\\)\" } catch { \"오류: $_\" })",
+      "PowerShell(cd \"c:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process python -ArgumentList \"app.py\" -NoNewWindow; Start-Sleep 3; try { $r = Invoke-WebRequest http://127.0.0.1:5000/ -TimeoutSec 5; \"HTTP $\\($r.StatusCode\\): $\\(\\($r.Content.Length\\)\\) chars\" } catch { \"Error: $_\" })",
+      "PowerShell(\\(Get-Command git -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell(python -c \"import pandas as pd; df = pd.read_excel\\('data/taka.xlsx', nrows=1\\); print\\(f'Columns: {df.shape[1]}'\\); print\\(list\\(df.columns\\)\\)\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host \"포트 5000 프로세스 종료 완료\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Name python3.13 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Stop-Process -Name python3.13 -Force -ErrorAction SilentlyContinue; Start-Sleep 1; cd \"C:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process python -ArgumentList \"app.py\"; Start-Sleep 8; python -c \"import urllib.request; r=urllib.request.urlopen\\('http://127.0.0.1:5000/'\\); print\\('GET / →', r.status\\)\")",
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(cd \"c:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process python -ArgumentList \"app.py\" -WindowStyle Hidden; Start-Sleep -Seconds 4; try { $r = [System.Net.WebRequest]::Create\\(\"http://localhost:5000/\"\\); $r.Timeout=5000; $resp=$r.GetResponse\\(\\); Write-Host \"HTTP\"$resp.StatusCode; $resp.Close\\(\\) } catch { Write-Host \"Error: $_\" })",
+      "PowerShell(try{$r=[System.Net.WebRequest]::Create\\(\"http://localhost:5000/\"\\);$r.Timeout=4000;$resp=$r.GetResponse\\(\\);$s=New-Object System.IO.StreamReader\\($resp.GetResponseStream\\(\\)\\);$content=$s.ReadToEnd\\(\\);$resp.Close\\(\\);Write-Host \"Status OK, HTML length:\"$content.Length;if\\($content -match \"VERTEX\"\\){Write-Host \"SF title found\"}if\\($content -match \"gmove\"\\){Write-Host \"Grid animation found\"}if\\($content -match \"slines\"\\){Write-Host \"Scanlines found\"}}catch{Write-Host \"Error: $_\"})",
+      "PowerShell(cd \"C:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process -NoNewWindow -FilePath \"python\" -ArgumentList \"web/app.py\" -RedirectStandardOutput \"$env:TEMP\\\\vertex_out.log\" -RedirectStandardError \"$env:TEMP\\\\vertex_err.log\"; Start-Sleep -Seconds 6; Get-Content \"$env:TEMP\\\\vertex_out.log\" -ErrorAction SilentlyContinue; Get-Content \"$env:TEMP\\\\vertex_err.log\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://127.0.0.1:5000/health\" -UseBasicParsing)",
+      "PowerShell(Get-Process -Name python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; cd \"C:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process -NoNewWindow -FilePath \"python\" -ArgumentList \"web/app.py\" -RedirectStandardOutput \"$env:TEMP\\\\vertex_out.log\" -RedirectStandardError \"$env:TEMP\\\\vertex_err.log\"; Start-Sleep -Seconds 5; Get-Content \"$env:TEMP\\\\vertex_out.log\"; Get-Content \"$env:TEMP\\\\vertex_err.log\")",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/\" -UseBasicParsing; $r.Content | Select-String -Pattern \"temp-boxes|temp-sel|온도 Sweep|t-start|f-tmin\" | Select-Object -First 10)",
+      "PowerShell(Stop-Process -Id 24860 -Force -ErrorAction SilentlyContinue; Stop-Process -Id 14324 -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; cd \"C:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process -NoNewWindow -FilePath \"python\" -ArgumentList \"web/app.py\" -RedirectStandardOutput \"$env:TEMP\\\\vertex_out2.log\" -RedirectStandardError \"$env:TEMP\\\\vertex_err2.log\"; Start-Sleep -Seconds 6; Get-Content \"$env:TEMP\\\\vertex_out2.log\"; Get-Content \"$env:TEMP\\\\vertex_err2.log\")",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/\" -UseBasicParsing; if\\($r.Content -match \"temp-boxes\"\\) {\"OK: temp-boxes found\"} else {\"FAIL: old HTML\"}; if\\($r.Content -match \"t-start\"\\) {\"OK: t-start CSS found\"} else {\"FAIL: CSS missing\"})",
+      "PowerShell(Get-Process -Name python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2; cd \"C:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process -NoNewWindow -FilePath \"python\" -ArgumentList \"web/app.py\" -RedirectStandardOutput \"$env:TEMP\\\\v3.log\" -RedirectStandardError \"$env:TEMP\\\\v3e.log\"; Start-Sleep -Seconds 6; Get-Content \"$env:TEMP\\\\v3.log\"; Get-Content \"$env:TEMP\\\\v3e.log\")",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/\" -UseBasicParsing; if\\($r.Content -match 'name=\"temp_min\"'\\) {\"OK: temp_min input restored\"} else {\"FAIL\"}; if\\($r.Content -match \"suggest_params\"\\) {\"OK: suggestParams JS found\"} else {\"FAIL: JS missing\"}; if\\($r.Content -notmatch \"temp-boxes\"\\) {\"OK: temp-boxes removed\"} else {\"FAIL: old box UI still present\"})",
+      "PowerShell(cd \"C:\\\\Users\\\\sod09\\\\Documents\\\\GitHub\\\\vertex\"; Start-Process -NoNewWindow -FilePath \"python\" -ArgumentList \"web/app.py\" -RedirectStandardOutput \"$env:TEMP\\\\v4.log\" -RedirectStandardError \"$env:TEMP\\\\v4e.log\"; Start-Sleep -Seconds 7; Get-Content \"$env:TEMP\\\\v4.log\"; Get-Content \"$env:TEMP\\\\v4e.log\")"
+    ]
+  }
+}

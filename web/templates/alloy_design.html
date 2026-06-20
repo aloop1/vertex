@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vertex — 합금 설계 대시보드</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+.wrap{max-width:1380px;margin:0 auto;padding:24px 28px 56px}
+.meta-bar{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 18px;display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;font-size:.8rem;color:var(--text-dim)}
+.meta-bar span{color:var(--text)}
+.meta-bar strong{color:var(--accent)}
+.best-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px}
+@media(max-width:760px){.best-grid{grid-template-columns:1fr}}
+.card-title{font-size:.71rem;color:var(--accent);font-weight:800;letter-spacing:.07em;text-transform:uppercase;margin-bottom:14px}
+.life-num{font-size:2.3rem;font-weight:800;color:var(--ok);letter-spacing:-.02em;margin-bottom:2px}
+.life-sub{font-size:.82rem;color:var(--text-dim)}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.bar-row{margin-bottom:8px}
+.bar-label{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px;color:var(--text-dim)}
+.bar-label .val{color:var(--text)}
+/* Pareto layout */
+.pareto-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,2fr);gap:16px;align-items:stretch}
+@media(max-width:980px){.pareto-layout{grid-template-columns:1fr}}
+.axis-bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.axis-btn{background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-size:.78rem;cursor:pointer;transition:all .15s;font-family:inherit}
+.axis-btn.active,.axis-btn:hover{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
+.detail-panel{display:flex;flex-direction:column}
+.detail-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.detail-rank{font-size:1rem;font-weight:800;color:var(--accent)}
+.detail-life{font-size:1.5rem;font-weight:800;color:var(--ok)}
+.kv{display:flex;justify-content:space-between;font-size:.82rem;padding:5px 0;border-bottom:1px solid var(--border-soft)}
+.kv .k{color:var(--text-dim)}.kv .v{font-weight:600;color:var(--text)}
+.ood-chip{display:inline-block;font-size:.72rem;border-radius:5px;padding:2px 8px;margin:2px 3px 2px 0;background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim)}
+/* Candidate table */
+.tbl-shell{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+table{width:100%;border-collapse:collapse;font-size:.8rem;min-width:760px}
+th{position:sticky;top:0;text-align:right;padding:10px 12px;color:var(--text-dim);font-weight:700;font-size:.71rem;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--surface-2);cursor:pointer;user-select:none;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th:hover{color:var(--accent)}
+th .arrow{font-size:.65rem}
+td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--border-soft);color:var(--text);white-space:nowrap}
+tbody tr{cursor:pointer;transition:background .12s}
+tbody tr:hover{background:var(--surface-3)}
+tbody tr.sel{background:color-mix(in srgb,var(--accent) 12%,var(--surface));outline:1px solid var(--accent)}
+.rank-chip{display:inline-flex;width:26px;height:26px;border-radius:50%;background:var(--surface-3);color:var(--text-dim);align-items:center;justify-content:center;font-weight:800;font-size:.72rem}
+tr.sel .rank-chip,tr:hover .rank-chip{background:var(--accent-strong);color:#fff}
+</style>
+</head>
+<body>
+<header class="vx-header">
+  <h1><span class="vx-brand-mark">V</span>Vertex — 합금 설계 대시보드</h1>
+  <div class="hdr-right">
+    <a class="btn-ghost" href="/">← 크립 수명 예측</a>
+    <button id="theme-toggle" title="테마 전환">☀</button>
+  </div>
+</header>
+<div class="wrap">
+<div id="meta-bar" class="meta-bar"></div>
+<div id="best-section"></div>
+
+<div class="sec">Pareto Front — 수명 · 비용 · 물리 위험도 트레이드오프</div>
+<div class="pareto-layout">
+  <div class="ch-box">
+    <div class="axis-bar">
+      <button class="axis-btn active" data-x="cost" onclick="setParetoX('cost',this)">비용 vs 수명</button>
+      <button class="axis-btn" data-x="risk" onclick="setParetoX('risk',this)">위험도 vs 수명</button>
+      <button class="axis-btn" data-x="ood" onclick="setParetoX('ood',this)">OOD 거리 vs 수명</button>
+    </div>
+    <div id="ch-pareto" style="height:420px"></div>
+    <p class="ref">점 색상 = 물리 위험도 · ★ = 최종 선정 후보 · 점 클릭 시 우측에 상세 정보 표시</p>
+  </div>
+  <div class="ch-box detail-panel" id="detail-panel">
+    <div class="empty">산점도에서 후보를 클릭하면<br>상세 정보가 표시됩니다.</div>
+  </div>
+</div>
+
+<div class="sec">후보 비교 — 조성 프로파일</div>
+<div class="ch-box">
+  <div class="ch-sub">선택 후보 vs 최종 선정 후보의 주요 원소 조성 (wt%)</div>
+  <div id="ch-comp-cmp" style="height:320px"></div>
+</div>
+
+<div class="sec">Pareto Top 후보 목록 <span id="cand-count" style="color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+<div class="tbl-shell">
+  <table id="cand-tbl">
+    <thead><tr id="tbl-head"></tr></thead>
+    <tbody id="tbl-body"></tbody>
+  </table>
+</div>
+</div>
+
+<script>
+var D = {{ payload | tojson }};
+var CANDS = D.candidates || [];
+var BEST = D.best;
+var _selIdx = -1;
+var _paretoX = 'cost';
+
+function fmt(v,d){if(v==null||v===undefined||isNaN(parseFloat(v)))return'—';return parseFloat(v).toFixed(d!=null?d:3);}
+function fmtHrs(log10){if(log10==null)return'—';var h=Math.pow(10,parseFloat(log10));if(h>87600)return(h/8760).toFixed(0)+'년';if(h>1000)return(h/1000).toFixed(1)+'k h';return h.toFixed(0)+' h';}
+function barCls(v,okMax,warnMax){if(v<=okMax)return'ok';if(v<=warnMax)return'warn';return'bad';}
+
+var ELEMS=['C','Si','Mn','P','S','Cr','Mo','W','Ni','Cu','V','Nb','N','Al','B','Co','Ta','O','Re'];
+var DESIGN_ELEMS=['C','Si','Mn','Cr','Mo','W','Ni','V','Nb','N','B'];
+var PHASES=[
+  {key:'bcc_fraction',label:'BCC_A2',okMax:.8,warnMax:1.0},
+  {key:'m23c6_fraction',label:'M₂₃C₆',okMax:.05,warnMax:.1},
+  {key:'laves_fraction',label:'Laves',okMax:.02,warnMax:.05},
+  {key:'sigma_fraction',label:'Sigma',okMax:.01,warnMax:.03},
+  {key:'fcc_fraction',label:'FCC',okMax:.05,warnMax:.1},
+];
+
+/* ── Meta bar ── */
+(function(){
+  var m=D.meta||{},cond=m.conditions||{},parts=[];
+  if(m.generated_at) parts.push('<span>생성: <strong>'+m.generated_at+'</strong></span>');
+  if(cond.temp_c!=null) parts.push('<span>온도: <strong>'+cond.temp_c+' °C</strong></span>');
+  if(cond.stress_mpa!=null) parts.push('<span>응력: <strong>'+cond.stress_mpa+' MPa</strong></span>');
+  if(cond.cost_limit!=null) parts.push('<span>비용 한도: <strong>$'+cond.cost_limit+'/kg</strong></span>');
+  parts.push('<span>후보 수: <strong>'+CANDS.length+'</strong></span>');
+  document.getElementById('meta-bar').innerHTML=parts.join('');
+})();
+
+/* ── Best section ── */
+(function(){
+  var bs=document.getElementById('best-section');
+  if(!BEST){bs.innerHTML='<div class="empty">아직 GA 최적화 결과가 없습니다. <code>python ga/engine.py</code>를 실행해 결과를 생성해 주세요.</div>';return;}
+  var b=BEST,logL=b.predicted_log_life;
+  var lifeCls=logL>=4?'c-ok':logL>=3?'c-warn':'c-bad';
+  var costCls=b.material_cost<30?'c-ok':b.material_cost<60?'c-warn':'c-bad';
+  var riskCls=b.physics_risk<10?'c-ok':b.physics_risk<50?'c-warn':'c-bad';
+  var oodTxt=b.ood_is_out_of_distribution===true?'<span class="c-bad">범위 이탈</span>':b.ood_is_out_of_distribution===false?'<span class="c-ok">범위 내</span>':'—';
+  var calTxt=b.thermo_success?'<span class="c-ok">성공</span>':'<span class="c-bad">미수행/실패</span>';
+  var pillsHtml='';
+  if(b.Fe_balance&&parseFloat(b.Fe_balance)>0) pillsHtml='<span class="pill"><strong>Fe</strong> '+fmt(b.Fe_balance,2)+'%</span>';
+  ELEMS.forEach(function(e){var v=b[e];if(v&&parseFloat(v)>0.001) pillsHtml+='<span class="pill"><strong>'+e+'</strong> '+fmt(v,3)+'%</span>';});
+  var phHtml='';
+  PHASES.forEach(function(ph){
+    var v=b[ph.key]!=null?parseFloat(b[ph.key]):null;
+    var pct=v!=null?Math.min(v*100,100):0;
+    var cls=v!=null?barCls(v,ph.okMax,ph.warnMax):'';
+    phHtml+='<div class="bar-row"><div class="bar-label"><span>'+ph.label+'</span><span class="val">'+(v!=null?pct.toFixed(2)+'%':'—')+'</span></div><div class="bar-bg"><div class="bar-fill '+cls+'" style="width:'+pct+'%"></div></div></div>';
+  });
+  bs.innerHTML='<div class="sec" style="margin-top:18px">최종 선정 합금</div>'+
+  '<div class="best-grid">'+
+  '<div class="card"><div class="card-title">예측 수명</div>'+
+  '<div class="life-num '+lifeCls+'">'+fmtHrs(logL)+'</div>'+
+  '<div class="life-sub">log₁₀(수명) = '+fmt(logL,3)+'</div>'+
+  '<div style="margin-top:18px">'+
+  '<div class="stat-row"><span class="lbl">재료 비용</span><span class="val '+costCls+'">$'+fmt(b.material_cost,2)+'/kg</span></div>'+
+  '<div class="stat-row"><span class="lbl">물리 위험도</span><span class="val '+riskCls+'">'+fmt(b.physics_risk,2)+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">OOD 상태</span><span class="val">'+oodTxt+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">OOD 거리</span><span class="val">'+fmt(b.ood_distance,3)+(b.ood_distance_threshold?' / 임계 '+fmt(b.ood_distance_threshold,2):'')+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">CALPHAD</span><span class="val">'+calTxt+'</span></div>'+
+  '</div>'+
+  '<div style="margin-top:12px"><div class="card-title" style="margin-bottom:8px">야금 지표</div>'+
+  '<div class="stat-row"><span class="lbl">KN</span><span class="val">'+fmt(b.KN,3)+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">Ms 온도</span><span class="val">'+(b.Ms_temp!=null?fmt(b.Ms_temp,1)+' °C':'—')+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">CEQ</span><span class="val">'+fmt(b.CEQ,3)+'</span></div>'+
+  '<div class="stat-row"><span class="lbl">총 합금량</span><span class="val">'+fmt(b.total_alloy_wt,2)+'%</span></div>'+
+  '</div></div>'+
+  '<div class="card"><div class="card-title">조성 (wt%)</div><div class="pills">'+pillsHtml+'</div>'+
+  '<div style="margin-top:20px"><div class="card-title" style="margin-bottom:10px">상 안정성 (CALPHAD)</div>'+phHtml+'</div></div>'+
+  '</div>';
+})();
+
+/* ── Pareto scatter ── */
+function paretoXDef(){
+  if(_paretoX==='risk') return {get:function(c){return c.physics_risk;},title:'물리 위험도 (penalty)',fmt:function(v){return fmt(v,2);}};
+  if(_paretoX==='ood')  return {get:function(c){return c.ood_distance;},title:'OOD Mahalanobis 거리',fmt:function(v){return fmt(v,3);}};
+  return {get:function(c){return c.material_cost;},title:'재료 비용 ($/kg, index)',fmt:function(v){return '$'+fmt(v,2);}};
+}
+
+function setParetoX(mode,btn){
+  _paretoX=mode;
+  document.querySelectorAll('.axis-btn').forEach(function(b){b.classList.toggle('active',b===btn);});
+  renderPareto();
+}
+
+function renderPareto(){
+  if(!window.Plotly||!CANDS.length) return;
+  var xd=paretoXDef(),c=vxChartColors();
+  var xs=CANDS.map(xd.get), ys=CANDS.map(function(cd){return cd.predicted_log_life;});
+  var risks=CANDS.map(function(cd){return cd.physics_risk!=null?cd.physics_risk:0;});
+  var texts=CANDS.map(function(cd,i){
+    return '#'+(i+1)+'<br>수명: '+fmtHrs(cd.predicted_log_life)+' (log₁₀='+fmt(cd.predicted_log_life,2)+')'
+      +'<br>'+xd.title.split(' (')[0]+': '+xd.fmt(xd.get(cd))
+      +'<br>위험도: '+fmt(cd.physics_risk,2)
+      +'<br>Cr '+fmt(cd.Cr,2)+' · Mo '+fmt(cd.Mo,2)+' · W '+fmt(cd.W,2);
+  });
+  var traces=[{
+    x:xs,y:ys,mode:'markers',type:'scatter',name:'Pareto 후보',
+    marker:{size:11,color:risks,colorscale:[[0,c.ok],[0.5,c.warn],[1,c.bad]],
+            showscale:true,colorbar:{title:{text:'위험도',side:'right'},thickness:12,len:.8,tickfont:{color:c.text}},
+            line:{color:c.line,width:1}},
+    text:texts,hovertemplate:'%{text}<extra></extra>',
+    selected:{marker:{size:16,opacity:1}},unselected:{marker:{opacity:.75}},
+  }];
+  if(BEST){
+    traces.push({
+      x:[xd.get(BEST)],y:[BEST.predicted_log_life],mode:'markers',type:'scatter',name:'최종 선정',
+      marker:{size:20,symbol:'star',color:c.accent,line:{color:c.text,width:1.2}},
+      hovertemplate:'★ 최종 선정<br>수명: '+fmtHrs(BEST.predicted_log_life)+'<extra></extra>',
+    });
+  }
+  Plotly.react('ch-pareto',traces,vxBaseLayout({
+    margin:{l:60,r:10,t:14,b:52},
+    xaxis:{title:xd.title},
+    yaxis:{title:'예측 수명 log₁₀(h)'},
+    hovermode:'closest',
+    legend:{orientation:'h',y:1.08,x:0},
+  }),{responsive:true,displayModeBar:false});
+  var el=document.getElementById('ch-pareto');
+  el.removeAllListeners&&el.removeAllListeners('plotly_click');
+  el.on('plotly_click',function(ev){
+    var pt=ev.points&&ev.points[0];
+    if(!pt||pt.curveNumber!==0)return;
+    selectCandidate(pt.pointIndex);
+  });
+}
+
+/* ── Detail panel ── */
+function selectCandidate(i){
+  _selIdx=i;
+  var cd=CANDS[i];
+  document.querySelectorAll('#tbl-body tr').forEach(function(tr){tr.classList.toggle('sel',parseInt(tr.dataset.idx)===i);});
+  var oodTxt=cd.ood_is_out_of_distribution===true?'<span class="c-bad">범위 이탈</span>':cd.ood_is_out_of_distribution===false?'<span class="c-ok">범위 내</span>':'—';
+  var pills='';
+  if(cd.Fe_balance&&parseFloat(cd.Fe_balance)>0) pills='<span class="pill"><strong>Fe</strong> '+fmt(cd.Fe_balance,2)+'%</span>';
+  ELEMS.forEach(function(e){var v=cd[e];if(v&&parseFloat(v)>0.001) pills+='<span class="pill"><strong>'+e+'</strong> '+fmt(v,3)+'%</span>';});
+  var phHtml='';
+  PHASES.forEach(function(ph){
+    var v=cd[ph.key]!=null?parseFloat(cd[ph.key]):null;
+    if(v==null)return;
+    var pct=Math.min(v*100,100),cls=barCls(v,ph.okMax,ph.warnMax);
+    phHtml+='<div class="bar-row"><div class="bar-label"><span>'+ph.label+'</span><span class="val">'+pct.toFixed(2)+'%</span></div><div class="bar-bg"><div class="bar-fill '+cls+'" style="width:'+pct+'%"></div></div></div>';
+  });
+  var oodChips='';
+  (cd.ood_top_contributors||[]).slice(0,5).forEach(function(tc){
+    var nm=tc.feature||tc[0]||'', vl=tc.contribution!=null?tc.contribution:tc[1];
+    oodChips+='<span class="ood-chip">'+nm+(vl!=null?' '+fmt(vl,2):'')+'</span>';
+  });
+  document.getElementById('detail-panel').innerHTML=
+    '<div class="detail-head"><span class="detail-rank">후보 #'+(i+1)+'</span><span class="detail-life">'+fmtHrs(cd.predicted_log_life)+'</span></div>'+
+    '<div class="kv"><span class="k">log₁₀(수명)</span><span class="v">'+fmt(cd.predicted_log_life,3)+'</span></div>'+
+    '<div class="kv"><span class="k">재료 비용</span><span class="v">$'+fmt(cd.material_cost,2)+'/kg</span></div>'+
+    '<div class="kv"><span class="k">물리 위험도</span><span class="v">'+fmt(cd.physics_risk,2)+'</span></div>'+
+    '<div class="kv"><span class="k">OOD</span><span class="v">'+oodTxt+' ('+fmt(cd.ood_distance,2)+')</span></div>'+
+    '<div class="kv"><span class="k">KN / CEQ</span><span class="v">'+fmt(cd.KN,2)+' / '+fmt(cd.CEQ,2)+'</span></div>'+
+    '<div class="kv"><span class="k">Ms 온도</span><span class="v">'+(cd.Ms_temp!=null?fmt(cd.Ms_temp,1)+' °C':'—')+'</span></div>'+
+    '<div class="card-title" style="margin-top:14px">조성 (wt%)</div><div class="pills" style="margin-top:0">'+pills+'</div>'+
+    (phHtml?'<div class="card-title" style="margin-top:14px">상 안정성</div>'+phHtml:'')+
+    (oodChips?'<div class="card-title" style="margin-top:14px">OOD 기여 상위 원소</div><div>'+oodChips+'</div>':'');
+  renderCompCompare();
+}
+
+/* ── Composition comparison ── */
+function renderCompCompare(){
+  if(!window.Plotly)return;
+  var c=vxChartColors();
+  var traces=[];
+  if(BEST){
+    traces.push({x:DESIGN_ELEMS,y:DESIGN_ELEMS.map(function(e){return parseFloat(BEST[e])||0;}),
+      name:'최종 선정',type:'bar',marker:{color:c.accent}});
+  }
+  if(_selIdx>=0){
+    var cd=CANDS[_selIdx];
+    traces.push({x:DESIGN_ELEMS,y:DESIGN_ELEMS.map(function(e){return parseFloat(cd[e])||0;}),
+      name:'후보 #'+(_selIdx+1),type:'bar',marker:{color:c.warn}});
+  }
+  if(!traces.length)return;
+  Plotly.react('ch-comp-cmp',traces,vxBaseLayout({
+    margin:{l:55,r:14,t:14,b:46},
+    barmode:'group',
+    xaxis:{title:'설계 원소'},
+    yaxis:{title:'wt%',type:'log'},
+    hovermode:'x unified',
+    legend:{orientation:'h',y:1.1,x:0},
+  }),{responsive:true,displayModeBar:false});
+}
+
+/* ── Candidate table ── */
+var TBL_COLS=[
+  {key:'_rank',label:'#',sortable:false},
+  {key:'predicted_log_life',label:'예측 수명',render:function(c){return fmtHrs(c.predicted_log_life)+' <span style="color:var(--text-faint)">('+fmt(c.predicted_log_life,2)+')</span>';}},
+  {key:'material_cost',label:'비용 $/kg',render:function(c){return fmt(c.material_cost,2);}},
+  {key:'physics_risk',label:'위험도',render:function(c){return fmt(c.physics_risk,2);}},
+  {key:'ood_distance',label:'OOD 거리',render:function(c){return fmt(c.ood_distance,2);}},
+  {key:'Cr',label:'Cr',render:function(c){return fmt(c.Cr,2);}},
+  {key:'Mo',label:'Mo',render:function(c){return fmt(c.Mo,2);}},
+  {key:'W',label:'W',render:function(c){return fmt(c.W,2);}},
+  {key:'Ni',label:'Ni',render:function(c){return fmt(c.Ni,2);}},
+  {key:'V',label:'V',render:function(c){return fmt(c.V,3);}},
+];
+var _sortKey='predicted_log_life',_sortAsc=false,_order=CANDS.map(function(_,i){return i;});
+
+function renderTableHead(){
+  var tr=document.getElementById('tbl-head');tr.innerHTML='';
+  TBL_COLS.forEach(function(col){
+    var th=document.createElement('th');
+    th.innerHTML=col.label+(col.key===_sortKey?' <span class="arrow">'+(_sortAsc?'▲':'▼')+'</span>':'');
+    if(col.sortable!==false){th.onclick=function(){
+      if(_sortKey===col.key)_sortAsc=!_sortAsc;else{_sortKey=col.key;_sortAsc=false;}
+      sortAndRender();
+    };}
+    tr.appendChild(th);
+  });
+}
+
+function sortAndRender(){
+  _order=CANDS.map(function(_,i){return i;});
+  if(_sortKey!=='_rank'){
+    _order.sort(function(a,b){
+      var va=parseFloat(CANDS[a][_sortKey]),vb=parseFloat(CANDS[b][_sortKey]);
+      if(isNaN(va))va=-Infinity;if(isNaN(vb))vb=-Infinity;
+      return _sortAsc?va-vb:vb-va;
+    });
+  }
+  renderTableHead();
+  var tb=document.getElementById('tbl-body');tb.innerHTML='';
+  _order.forEach(function(idx){
+    var cd=CANDS[idx],tr=document.createElement('tr');
+    tr.dataset.idx=idx;
+    if(idx===_selIdx)tr.classList.add('sel');
+    TBL_COLS.forEach(function(col){
+      var td=document.createElement('td');
+      td.innerHTML=col.key==='_rank'?'<span class="rank-chip">'+(idx+1)+'</span>':col.render(cd);
+      tr.appendChild(td);
+    });
+    tr.onclick=function(){selectCandidate(idx);};
+    tb.appendChild(tr);
+  });
+}
+
+document.getElementById('cand-count').textContent='('+CANDS.length+'개)';
+sortAndRender();
+renderPareto();
+renderCompCompare();
+if(CANDS.length)selectCandidate(0);
+
+window.addEventListener('vx-themechange',function(){renderPareto();renderCompCompare();});
+</script>
+</body>
+</html>
