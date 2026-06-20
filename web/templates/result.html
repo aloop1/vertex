@@ -128,6 +128,24 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
   #ctrl{padding:12px 16px}
   .prod-card,.ht-card{flex-basis:300px;max-width:300px}
 }
+.composition-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;width:100%;min-width:100%}
+.composition-grid .prod-card{flex:initial;max-width:none;width:100%;padding:20px 22px}
+.comp-summary{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;line-height:1.6;color:var(--text-dim);font-size:.84rem}
+.comp-summary strong{color:var(--text)}
+.comp-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.comp-kpi{background:var(--surface-3);border:1px solid var(--border-soft);border-radius:9px;padding:10px 12px}
+.comp-kpi-lbl{font-size:.7rem;color:var(--text-dim);margin-bottom:4px}
+.comp-kpi-val{font-size:1rem;color:var(--text);font-weight:800}
+.elem-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
+.elem-card{background:var(--surface);border:1px solid var(--border-soft);border-radius:9px;padding:10px 12px;min-height:92px}
+.elem-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
+.elem-symbol{font-size:.95rem;font-weight:800;color:var(--text)}
+.elem-name{font-size:.72rem;color:var(--text-dim);margin-left:4px;font-weight:500}
+.elem-value{font-size:.78rem;color:var(--accent);font-weight:700;white-space:nowrap}
+.elem-role{font-size:.75rem;color:var(--text-dim);line-height:1.45}
+.comp-note{margin-top:10px;font-size:.75rem;color:var(--text-faint);line-height:1.55}
+@media(max-width:640px){.composition-grid{grid-template-columns:1fr}.comp-kpis{grid-template-columns:1fr}.elem-list{grid-template-columns:1fr}}
+.pill-wrap{display:flex;flex-wrap:wrap;gap:6px}
 </style>
 </head>
 <body>
@@ -176,20 +194,8 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 <div class="sec">분석 요약</div>
 <div class="stats" id="stat-bar"></div>
 
-<div class="info-layout">
-  <div>
-    <div class="sec">제품 정보</div>
-    <div class="scroll-shell">
-      <div class="prod-grid" id="prod-grid"></div>
-    </div>
-  </div>
-  <div>
-    <div class="sec">조성 분석 (원소 구성, wt%)</div>
-    <div class="ch-box" id="comp-box" style="overflow-x:auto;overflow-y:hidden">
-      <div id="ch-comp" style="height:320px"></div>
-    </div>
-  </div>
-</div>
+<div class="sec">제품 정보</div>
+<div class="prod-grid composition-grid" id="prod-grid"></div>
 
 <div class="sec">열처리 공정</div>
 <div class="ht-layout">
@@ -319,6 +325,94 @@ let PLOTLY_READY = false;
 
 const COLORS = VX_SERIES;
 
+(function(){
+  const grid=document.getElementById('prod-grid');
+  const ELEM_KO={
+    Fe:'철',C:'탄소',Si:'규소',Mn:'망간',P:'인',S:'황',Cr:'크롬',Mo:'몰리브덴',W:'텅스텐',Ni:'니켈',Cu:'구리',V:'바나듐',Nb:'나이오븀',N:'질소',Al:'알루미늄',B:'붕소',Co:'코발트',Ta:'탄탈럼',O:'산소',Re:'레늄'
+  };
+  const ELEM_ROLE={
+    Fe:'합금의 바탕이 되는 기본 금속입니다. 다른 원소들이 이 철 기지 안에서 강도와 안정성을 조절합니다.',
+    Cr:'고온 산화와 부식에 대한 저항성을 높이고 페라이트계 내열강의 기본 성격을 결정합니다.',
+    W:'고온에서 조직이 쉽게 무너지지 않도록 돕는 강화 원소입니다. 장시간 크리프 저항에 기여합니다.',
+    Mo:'고온 강도와 크리프 저항을 높이는 대표 원소입니다. 장시간 하중을 버티는 능력과 관련이 큽니다.',
+    V:'미세한 탄화물·질화물 형성을 도와 고온에서 강도를 유지하는 데 기여합니다.',
+    Nb:'미세 석출물을 만들어 조직을 고정하고, 고온 장시간 사용 시 강도 저하를 늦추는 역할을 합니다.',
+    C:'탄화물 형성에 필요한 원소입니다. 너무 적거나 많으면 강도와 안정성 균형이 흔들릴 수 있습니다.',
+    N:'질화물 형성과 석출 강화에 관여합니다. 소량이지만 고온 강도에 영향을 줄 수 있습니다.',
+    B:'아주 적은 양으로도 입계 안정화에 영향을 주며, 고온 장시간 수명 개선에 활용됩니다.',
+    Mn:'제조 과정의 탈산·황 제어와 기계적 성질 보조에 사용됩니다.',
+    Si:'탈산과 산화 저항 보조에 쓰입니다. 조성 균형을 맞추는 보조 원소입니다.',
+    Ni:'조직 안정성과 인성에 영향을 줄 수 있지만, 페라이트계에서는 과도한 첨가를 주의합니다.',
+    Al:'탈산 및 일부 질화물 형성에 관여하는 보조 원소입니다.',
+    P:'불순물 성격이 강한 원소로, 많아지면 취성 문제가 생길 수 있어 보통 낮게 관리합니다.',
+    S:'불순물 성격이 강하며, 많아지면 가공성이나 인성에 불리할 수 있어 낮게 관리합니다.',
+    O:'산소는 보통 불순물 또는 산화물 형성과 관련되어 낮게 관리하는 값입니다.',
+    Cu:'내식성이나 석출 거동에 영향을 줄 수 있는 보조 원소입니다.',
+    Co:'고온 강도와 조직 안정성에 영향을 줄 수 있는 합금 원소입니다.',
+    Ta:'Nb와 유사하게 탄화물·질화물 형성을 통해 고온 강도에 기여할 수 있습니다.',
+    Re:'고온 합금에서 확산을 늦추고 조직 안정성에 기여할 수 있는 고가 원소입니다.'
+  };
+  function fmtWt(v){
+    const n=Number(v);
+    if(!Number.isFinite(n)) return '—';
+    if(Math.abs(n)>0&&Math.abs(n)<0.001) return n.toExponential(2)+' wt%';
+    if(n<0.1) return n.toFixed(4)+' wt%';
+    if(n<1) return n.toFixed(3)+' wt%';
+    return n.toFixed(2)+' wt%';
+  }
+  function elemCard([k,v]){
+    const name=ELEM_KO[k]||'';
+    const role=ELEM_ROLE[k]||'합금의 세부 물성 조정에 관여하는 원소입니다.';
+    return `<div class="elem-card"><div class="elem-head"><div><span class="elem-symbol">${k}</span><span class="elem-name">${name}</span></div><span class="elem-value">${fmtWt(v)}</span></div><div class="elem-role">${role}</div></div>`;
+  }
+  function topNames(entries,n){
+    return entries.slice(0,n).map(([k,v])=>`${k} ${fmtWt(v)}`).join(', ');
+  }
+  RD.products.forEach((p,i)=>{
+    const compositionEntries=Object.entries(p.composition||{}).filter(([k,v])=>Number(v)>0);
+    const sortedComposition=[...compositionEntries].sort((a,b)=>Number(b[1])-Number(a[1]));
+    const major=sortedComposition.filter(([k,v])=>Number(v)>=1);
+    const trace=sortedComposition.filter(([k,v])=>Number(v)<1);
+    const fe=Number((p.comp_pie||{})['Fe (bal.)']);
+    const alloySum=compositionEntries.reduce((s,[,v])=>s+Number(v||0),0);
+    const keyElems=sortedComposition.slice(0,3).map(([k])=>k).join('–')||'입력 조성';
+    const summary=`이 소재는 ${Number.isFinite(fe)?`철(Fe) 약 ${fe.toFixed(1)} wt%를 바탕으로 한`:''} <strong>${keyElems}</strong> 중심 합금입니다. `+
+      `큰 비율의 원소는 내열성·고온 강도의 기본 골격을 만들고, 1 wt% 미만의 미량 원소는 석출물·입계 안정화처럼 수명에 민감한 부분을 조정합니다.`;
+    const majorHtml=major.map(elemCard).join('')||'<div class="comp-note">1 wt% 이상인 주요 합금 원소가 없습니다.</div>';
+    const traceHtml=trace.map(elemCard).join('')||'<div class="comp-note">1 wt% 미만의 미량 첨가 원소가 없습니다.</div>';
+    const htHtml=Object.entries(p.heat_treatment||{}).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join('')||'<span class="prod-meta">입력된 열처리 정보 없음</span>';
+    grid.insertAdjacentHTML('beforeend',`
+      <article class="prod-card" style="border-top:3px solid ${COLORS[i%COLORS.length]}">
+        <div class="prod-head">
+          <div>
+            <div class="prod-title" style="color:${COLORS[i%COLORS.length]}">${p.name}</div>
+            <div class="prod-meta">조성 ${compositionEntries.length}개 원소 · 열처리 ${Object.keys(p.heat_treatment||{}).length}개 조건</div>
+          </div>
+          <div class="pill">예측 대상</div>
+        </div>
+        <div class="comp-summary">${summary}</div>
+        <div class="comp-kpis">
+          <div class="comp-kpi"><div class="comp-kpi-lbl">기지 금속</div><div class="comp-kpi-val">${Number.isFinite(fe)?`Fe ${fe.toFixed(1)}%`:'Fe —'}</div></div>
+          <div class="comp-kpi"><div class="comp-kpi-lbl">합금 원소 합계</div><div class="comp-kpi-val">${fmtWt(alloySum).replace(' wt%','%')}</div></div>
+          <div class="comp-kpi"><div class="comp-kpi-lbl">상위 조성</div><div class="comp-kpi-val" style="font-size:.82rem;line-height:1.4">${topNames(sortedComposition,3)||'—'}</div></div>
+        </div>
+        <div class="prod-block">
+          <div class="prod-block-title">주요 합금 원소 <span class="prod-meta">1 wt% 이상</span></div>
+          <div class="elem-list">${majorHtml}</div>
+        </div>
+        <div class="prod-block">
+          <div class="prod-block-title">미량 첨가 원소 <span class="prod-meta">1 wt% 미만 · 소량이어도 수명에 영향</span></div>
+          <div class="elem-list">${traceHtml}</div>
+        </div>
+        <div class="prod-block">
+          <div class="prod-block-title">열처리 조건</div>
+          <div class="pill-row">${htHtml}</div>
+        </div>
+      </article>
+    `);
+  });
+})();
+
 function refColors(){
   const c=vxChartColors();
   return [{v:2,label:'100h',color:c.bad},{v:3,label:'1,000h',color:c.warn},{v:4,label:'10,000h',color:c.ok},{v:5,label:'100,000h',color:c.accent}];
@@ -389,38 +483,6 @@ function requirePlotly(ids){
 }
 
 (function(){
-  const grid=document.getElementById('prod-grid');
-  RD.products.forEach((p,i)=>{
-    const compositionEntries = Object.entries(p.composition);
-    const sortedComposition = [...compositionEntries].sort((a,b)=>b[1]-a[1]);
-    const topComposition = sortedComposition.slice(0, 8);
-    grid.insertAdjacentHTML('beforeend',`
-      <article class="prod-card" style="border-top:3px solid ${COLORS[i%COLORS.length]}">
-        <div class="prod-head">
-          <div>
-            <div class="prod-title" style="color:${COLORS[i%COLORS.length]}">${p.name}</div>
-            <div class="prod-meta">조성 ${compositionEntries.length}개 원소 · 열처리 ${Object.keys(p.heat_treatment).length}개 조건</div>
-          </div>
-          <div class="pill">예측 대상</div>
-        </div>
-        <div class="prod-block">
-          <div class="prod-block-title">주요 조성</div>
-          <div class="pill-row">${topComposition.map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join('') || '—'}</div>
-        </div>
-        <div class="prod-block">
-          <div class="prod-block-title">전체 조성</div>
-          <div class="pill-row">${compositionEntries.map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join('') || '—'}</div>
-        </div>
-        <div class="prod-block">
-          <div class="prod-block-title">열처리 조건</div>
-          <div class="pill-row">${Object.entries(p.heat_treatment).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join('') || '<span class="prod-meta">입력된 열처리 정보 없음</span>'}</div>
-        </div>
-      </article>
-    `);
-  });
-})();
-
-(function(){
   const bar=document.getElementById('stat-bar');
   RD.products.forEach((p,i)=>{
     const maxLog=Math.max(...p.temp_sweep.log10_hours),minLog=Math.min(...p.temp_sweep.log10_hours);
@@ -467,27 +529,6 @@ function renderHeatmap(idx){
   ],vxBaseLayout({margin:{l:65,r:80,t:10,b:56},xaxis:{title:'온도 (K)'},yaxis:{title:'응력 (MPa)',type:'log'},hovermode:'closest'}),{responsive:true,displayModeBar:false});
 }
 
-const ELEM_CLR={'Fe (bal.)':'#5c708c','Cr':'#e74c3c','Mo':'#9b59b6','W':'#3498db','Ni':'#27ae60','Co':'#1abc9c','V':'#f1c40f','Nb':'#e67e22','Ta':'#d35400','Al':'#bdc3c7','C':'#7f8c8d','Si':'#95a5a6','Mn':'#34495e','N':'#5dade2','B':'#a9cce3','Cu':'#f39c12','P':'#f9e79f','S':'#fad7a0','Rh':'#c39bd3','Re':'#a2d9ce','O':'#f8c471'};
-function renderCompositionChart(){
-  if(!requirePlotly(['ch-comp']))return;
-  requestAnimationFrame(function(){
-    const c=vxChartColors();
-    const visible = RD.products;
-    const N=Math.max(1, visible.length);
-    const panelWidth = 260;
-    const chartEl = document.getElementById('ch-comp');
-    const box = document.getElementById('comp-box');
-    const boxInner = box ? Math.max(box.clientWidth - 28, 200) : 400;
-    const chartWidth = Math.max(N * panelWidth, boxInner);
-    chartEl.style.width = chartWidth + 'px';
-    chartEl.style.height = '320px';
-    Plotly.react('ch-comp',visible.map((p,i)=>{
-      const W=1/N;
-      const labels=Object.keys(p.comp_pie),values=Object.values(p.comp_pie);
-      return {labels,values,type:'pie',hole:0.48,name:p.name,textinfo:'label+percent',textposition:'inside',insidetextorientation:'radial',textfont:{size:10,color:'#fff'},marker:{colors:labels.map(l=>ELEM_CLR[l]||'#5a6a88'),line:{color:c.plot,width:1.5}},domain:{x:[i*W+0.015,(i+1)*W-0.015],y:[0.08,0.98]},title:{text:'<b>'+p.name+'</b>',font:{color:COLORS[i%COLORS.length],size:12},position:'bottom center'},hovertemplate:'%{label}<br>%{value:.3f} wt%<br>%{percent}<extra></extra>'};
-    }),{paper_bgcolor:c.paper,plot_bgcolor:c.plot,font:{color:c.text,size:11},showlegend:false,margin:{l:10,r:10,t:20,b:20},width:chartWidth,height:320},{responsive:false,displayModeBar:false});
-  });
-}
 function renderThermalCycle(){
   if(!requirePlotly(['ch-ht']))return;
   const c=vxChartColors();
@@ -714,7 +755,6 @@ function renderGASection(){
 }
 
 function renderAllCharts(){
-  renderCompositionChart();
   renderThermalCycle();
   updateDashboard();
   renderGASection();
@@ -741,7 +781,7 @@ function loadPlotlyAndRender(){
     renderAllCharts();
   };
   script.onerror=()=>{
-    ['ch-comp','ch-ht','ch-dash'].forEach(id=>setChartFallback(id,'차트 라이브러리를 불러오지 못했습니다.<br>인터넷 연결을 확인하거나 잠시 후 다시 시도해주세요.'));
+    ['ch-ht','ch-dash'].forEach(id=>setChartFallback(id,'차트 라이브러리를 불러오지 못했습니다.<br>인터넷 연결을 확인하거나 잠시 후 다시 시도해주세요.'));
   };
   document.body.appendChild(script);
 }

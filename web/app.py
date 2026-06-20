@@ -1,4 +1,4 @@
-﻿"""Vertex — 크립 수명 예측 (추론 전용 웹앱)
+"""Vertex — 크립 수명 예측 (추론 전용 웹앱)
 
 제품 조성·열처리 데이터(수명 컬럼 불필요)를 업로드하면
 온도·응력 sweep을 통해 크립 수명을 예측하고 시각화합니다.
@@ -581,11 +581,6 @@ def alloy_design():
         "meta": {**(best_meta or {}), **(pareto_meta or {})},
     }
     return render_template("alloy_design.html", payload=payload)
-
-
-    )
-
-
 
 
 
