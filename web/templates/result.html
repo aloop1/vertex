@@ -8,6 +8,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
 <style>
+.hdr-timestamp{font-size:.68rem;font-weight:400;color:var(--text-faint);margin-left:12px;letter-spacing:0;vertical-align:middle}
+.prod-export-btn{background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim);font-size:.68rem;padding:3px 8px;border-radius:6px;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
+.prod-export-btn:hover{border-color:var(--accent);color:var(--accent)}
 #ctrl{background:var(--surface-2);border-bottom:1px solid var(--border);padding:12px 28px;display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;position:sticky;top:63px;z-index:99}
 .ctrl-grp{display:flex;flex-direction:column;gap:6px}
 .ctrl-grp-title{font-size:.7rem;font-weight:800;color:var(--accent);letter-spacing:.07em;text-transform:uppercase}
@@ -32,9 +35,6 @@
 .info-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:22px;align-items:start;margin-top:4px}
 @media(max-width:960px){.info-layout{grid-template-columns:1fr}}
 .ht-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;margin-top:4px}
-.hm-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.hm-btn{background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim);padding:5px 13px;border-radius:5px;font-size:.78rem;cursor:pointer;transition:background .15s,color .15s;font-family:inherit}
-.hm-btn.active,.hm-btn:hover{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
 .stats{display:flex;gap:16px;flex-wrap:wrap;margin-top:4px}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;flex:1;min-width:200px}
 .stat-lbl{font-size:.72rem;color:var(--text-dim);margin-bottom:6px}
@@ -72,20 +72,9 @@
 .ga-bar-label span:last-child{color:var(--text)}
 .ga-meta-bar{font-size:.75rem;color:var(--text-faint);margin-top:10px;display:flex;flex-wrap:wrap;gap:12px}
 .ga-meta-bar span{color:var(--text-dim)}.ga-meta-bar strong{color:var(--accent)}
-/* Loading overlay */
-#lov{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 93%,transparent);z-index:2000;display:none;flex-direction:column;align-items:center;justify-content:center}
-#lov.show{display:flex}
-#lv-canvas{position:absolute;inset:0;width:100%;height:100%}
-.lv-content{position:relative;z-index:1;text-align:center;pointer-events:none}
-.lv-spin{width:54px;height:54px;border:3px solid var(--border);border-top-color:var(--accent-strong);border-radius:50%;animation:lv-rot 1s linear infinite;margin:0 auto 22px}
-@keyframes lv-rot{to{transform:rotate(360deg)}}
-.lv-title{font-size:1.1rem;color:var(--accent);font-weight:700;letter-spacing:.04em;margin-bottom:10px}
-.lv-step{font-size:.82rem;color:var(--text-dim);min-height:20px;transition:opacity .3s}
 /* Dashboard */
 .dash-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:4px}
 .dash-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.dash-tab{background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);padding:6px 16px;border-radius:6px;font-size:.8rem;cursor:pointer;transition:all .15s;border-left-width:3px;font-family:inherit}
-.dash-tab.active{color:var(--text);background:var(--surface-3);border-color:var(--accent-strong)}
 .dash-inner{display:grid;grid-template-columns:1fr;gap:16px;align-items:stretch}
 .sliders-col{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:16px}
 .sl-wrap{display:flex;flex-direction:column;gap:10px;user-select:none;background:var(--surface-2);border-radius:12px;border:1px solid var(--border-soft);padding:14px 16px}
@@ -144,14 +133,18 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 .elem-value{font-size:.78rem;color:var(--accent);font-weight:700;white-space:nowrap}
 .elem-role{font-size:.75rem;color:var(--text-dim);line-height:1.45}
 .comp-note{margin-top:10px;font-size:.75rem;color:var(--text-faint);line-height:1.55}
+#export-all-btn{font-size:.78rem}
 @media(max-width:640px){.composition-grid{grid-template-columns:1fr}.comp-kpis{grid-template-columns:1fr}.elem-list{grid-template-columns:1fr}}
 .pill-wrap{display:flex;flex-wrap:wrap;gap:6px}
 </style>
 </head>
 <body>
 <header class="vx-header">
-  <h1><span class="vx-brand-mark">V</span>Vertex — 크립 수명 예측 결과</h1>
+  <h1><span class="vx-brand-mark">V</span>Vertex — 크립 수명 예측 결과
+    {% if payload.generated_at %}<span class="hdr-timestamp">생성 {{ payload.generated_at }}</span>{% endif %}
+  </h1>
   <div class="hdr-right">
+    <button class="btn-ghost" id="export-all-btn" title="모든 제품의 온도·응력 sweep 데이터를 CSV로 저장">⬇ 전체 CSV</button>
     <a class="btn-ghost" href="/alloy_design">⚗ 합금 설계</a>
     <a class="btn-ghost" href="/">← 새 분석</a>
     <button id="theme-toggle" title="테마 전환">☀</button>
@@ -162,32 +155,24 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
   <div class="ctrl-grp">
     <div class="ctrl-grp-title">온도 Sweep</div>
     <div class="ctrl-row">
-      <div class="ctrl-field"><span class="ctrl-lbl">응력 고정값 (MPa)</span><input class="ctrl-inp" id="c-fs" type="number" step="10"></div>
-      <div class="ctrl-field"><span class="ctrl-lbl">최소 온도 (K)</span><input class="ctrl-inp" id="c-tmin" type="number" step="10"></div>
-      <div class="ctrl-field"><span class="ctrl-lbl">최대 온도 (K)</span><input class="ctrl-inp" id="c-tmax" type="number" step="10"></div>
+      <div class="ctrl-field"><span class="ctrl-lbl">응력 고정값 (MPa)</span><input class="ctrl-inp" id="c-fs" type="number" step="any"></div>
+      <div class="ctrl-field"><span class="ctrl-lbl">최소 온도 (K)</span><input class="ctrl-inp" id="c-tmin" type="number" step="any"></div>
+      <div class="ctrl-field"><span class="ctrl-lbl">최대 온도 (K)</span><input class="ctrl-inp" id="c-tmax" type="number" step="any"></div>
     </div>
   </div>
   <div class="ctrl-sep"></div>
   <div class="ctrl-grp">
     <div class="ctrl-grp-title">응력 Sweep</div>
     <div class="ctrl-row">
-      <div class="ctrl-field"><span class="ctrl-lbl">온도 고정값 (K)</span><input class="ctrl-inp" id="c-ft" type="number" step="10"></div>
-      <div class="ctrl-field"><span class="ctrl-lbl">최소 응력 (MPa)</span><input class="ctrl-inp" id="c-smin" type="number" step="5"></div>
-      <div class="ctrl-field"><span class="ctrl-lbl">최대 응력 (MPa)</span><input class="ctrl-inp" id="c-smax" type="number" step="10"></div>
+      <div class="ctrl-field"><span class="ctrl-lbl">온도 고정값 (K)</span><input class="ctrl-inp" id="c-ft" type="number" step="any"></div>
+      <div class="ctrl-field"><span class="ctrl-lbl">최소 응력 (MPa)</span><input class="ctrl-inp" id="c-smin" type="number" step="any"></div>
+      <div class="ctrl-field"><span class="ctrl-lbl">최대 응력 (MPa)</span><input class="ctrl-inp" id="c-smax" type="number" step="any"></div>
     </div>
   </div>
   <button id="apply-btn" class="btn-primary" onclick="applyParams()">▶ 적용</button>
 </div>
 
-<!-- Loading overlay -->
-<div id="lov">
-  <canvas id="lv-canvas"></canvas>
-  <div class="lv-content">
-    <div class="lv-spin"></div>
-    <div class="lv-title">예측 계산 중...</div>
-    <div class="lv-step" id="lv-step">데이터 준비 중…</div>
-  </div>
-</div>
+{% include '_loading_overlay.html' %}
 
 <div class="wrap">
 
@@ -306,10 +291,10 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
     고정 온도 <span id="lbl-lmp-t"></span> K 에서 응력을 변화시켜 산출</p>
   </div>
   <div class="ch-box">
-    <div class="ch-sub">운전 안전 영역 히트맵</div>
-    <div class="hm-bar" id="hm-sel"></div>
+    <div class="ch-sub">운전 안전 영역 히트맵 &nbsp;<span id="hm-active-label" style="color:var(--text-faint);font-weight:400"></span></div>
     <div id="ch-hm" style="height:320px"></div>
-    <p class="ref">색상: 예측 log₁₀(수명 / 시간) &nbsp;·&nbsp; 등고선: 100h / 1,000h / 10,000h / 100,000h</p>
+    <p class="ref">색상: 예측 log₁₀(수명 / 시간) &nbsp;·&nbsp; 등고선: 100h / 1,000h / 10,000h / 100,000h<br>
+    ※ 위 <b>실시간 대시보드</b>에서 선택한 제품 탭과 동일하게 표시됩니다.</p>
   </div>
 </div>
 
@@ -388,7 +373,10 @@ const COLORS = VX_SERIES;
             <div class="prod-title" style="color:${COLORS[i%COLORS.length]}">${p.name}</div>
             <div class="prod-meta">조성 ${compositionEntries.length}개 원소 · 열처리 ${Object.keys(p.heat_treatment||{}).length}개 조건</div>
           </div>
-          <div class="pill">예측 대상</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="prod-export-btn" onclick="exportProductCsv(${i})" title="온도·응력 sweep 데이터 CSV 저장">⬇ CSV</button>
+            <div class="pill">예측 대상</div>
+          </div>
         </div>
         <div class="comp-summary">${summary}</div>
         <div class="comp-kpis">
@@ -514,12 +502,12 @@ function renderLMPChart(){
   Plotly.react('ch-lmp',RD.products.map((p,i)=>({x:p.lmp.lmp_vals,y:p.lmp.stresses_mpa,name:p.name,type:'scatter',mode:'lines',line:{color:COLORS[i%COLORS.length],width:2.5},hovertemplate:'LMP=%{x:.3f}<br>응력=%{y:.1f} MPa<extra>'+p.name+'</extra>'})),
     vxBaseLayout({margin:{l:65,r:20,t:24,b:56},xaxis:{title:'Larson-Miller Parameter (×10³)'},yaxis:{title:'응력 (MPa)',type:'log'},hovermode:'closest'}),{responsive:true,displayModeBar:false});
 }
-let _hmIdx=0;
 function renderHeatmap(idx){
   if(!requirePlotly(['ch-hm']))return;
-  if(idx!==undefined)_hmIdx=idx;
-  document.querySelectorAll('.hm-btn').forEach((b,i)=>b.classList.toggle('active',i===_hmIdx));
-  const hm=RD.products[_hmIdx].heatmap;
+  if(idx!==undefined)_dashIdx=idx;
+  const lbl=document.getElementById('hm-active-label');
+  if(lbl)lbl.textContent='— 표시 중: '+RD.products[_dashIdx].name;
+  const hm=RD.products[_dashIdx].heatmap;
   const c=vxChartColors();
   const labelClr=vxTheme()==='dark'?'rgba(255,255,255,0.8)':'rgba(30,38,56,0.85)';
   const lineClr=vxTheme()==='dark'?'rgba(255,255,255,0.4)':'rgba(30,38,56,0.45)';
@@ -569,41 +557,17 @@ function buildHTCards(){
   document.getElementById('ht-cards').innerHTML=html||'<p style="color:var(--text-faint);font-size:.82rem">열처리 데이터 없음</p>';
 }
 
-(function(){
-  const sel=document.getElementById('hm-sel');
-  RD.products.forEach((p,i)=>{const b=document.createElement('button');b.className='hm-btn'+(i===0?' active':'');b.style.cssText='border-left:3px solid '+COLORS[i%COLORS.length];b.textContent=p.name;b.onclick=()=>renderHeatmap(i);sel.appendChild(b);});
-  buildHTCards();
-})();
+buildHTCards();
 
 /* ── Loading overlay ── */
-let _raf=null,_stepTimer=null;
-const LOV_STEPS=['데이터 준비 중…','온도 조건 계산 중…','응력 조건 계산 중…','안전 영역 분석 중…','결과 시각화 중…'];
 function showLoading(){
-  const canvas=document.getElementById('lv-canvas');
-  const ctx=canvas.getContext('2d');
-  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
-  const pts=Array.from({length:70},()=>({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*2+.8,vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5,a:Math.random()*.6+.15}));
-  function frame(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    for(let i=0;i<pts.length;i++){
-      const p=pts[i];p.x+=p.vx;p.y+=p.vy;
-      if(p.x<0)p.x=canvas.width;if(p.x>canvas.width)p.x=0;
-      if(p.y<0)p.y=canvas.height;if(p.y>canvas.height)p.y=0;
-      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(74,124,247,${p.a})`;ctx.fill();
-      for(let j=i+1;j<pts.length;j++){const dx=p.x-pts[j].x,dy=p.y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<110){ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(74,124,247,${(1-d/110)*.15})`;ctx.lineWidth=.7;ctx.stroke();}}
-    }
-    _raf=requestAnimationFrame(frame);
-  }
-  frame();
-  let si=0;const stepEl=document.getElementById('lv-step');stepEl.textContent=LOV_STEPS[0];
-  _stepTimer=setInterval(()=>{si=(si+1)%LOV_STEPS.length;stepEl.textContent=LOV_STEPS[si];},650);
-  document.getElementById('lov').classList.add('show');
+  vxShowLoading({
+    title:'예측 계산 중...',
+    steps:['데이터 준비 중…','온도 조건 계산 중…','응력 조건 계산 중…','안전 영역 분석 중…','결과 시각화 중…'],
+    interval:650,
+  });
 }
-function hideLoading(){
-  if(_raf){cancelAnimationFrame(_raf);_raf=null;}
-  clearInterval(_stepTimer);
-  document.getElementById('lov').classList.remove('show');
-}
+function hideLoading(){ vxHideLoading(); }
 
 /* ── Dashboard ── */
 let _dashIdx=0,_curTemp=RD.fixed_temp,_curStress=RD.fixed_stress;
@@ -657,9 +621,14 @@ function updateDashboard(){
 function initDashboard(){
   const tabs=document.getElementById('dash-tabs');tabs.innerHTML='';
   RD.products.forEach((p,i)=>{
-    const btn=document.createElement('button');btn.className='dash-tab'+(i===0?' active':'');
+    const btn=document.createElement('button');btn.className='vx-pill-btn vx-pill-tab'+(i===0?' active':'');
     btn.style.borderLeftColor=COLORS[i%COLORS.length];btn.textContent=p.name;
-    btn.onclick=()=>{_dashIdx=i;document.querySelectorAll('.dash-tab').forEach((b,j)=>b.classList.toggle('active',j===i));updateDashboard();};
+    btn.onclick=()=>{
+      _dashIdx=i;
+      document.querySelectorAll('#dash-tabs .vx-pill-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
+      updateDashboard();
+      if(_detRendered)renderHeatmap(i);
+    };
     tabs.appendChild(btn);
   });
   const hm=RD.products[0].heatmap;
@@ -821,6 +790,44 @@ async function applyParams(){
   }catch(e){alert('재계산 실패: '+e.message);}
   finally{hideLoading();document.getElementById('apply-btn').disabled=false;}
 }
+
+/* ── CSV export ── */
+function downloadCsv(filename, rows){
+  const csv=rows.map(r=>r.map(v=>{
+    if(v===null||v===undefined) return '';
+    const s=String(v);
+    return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  }).join(',')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportProductCsv(idx){
+  const p=RD.products[idx];
+  const rows=[['product','sweep_type','temp_k','stress_mpa','log10_hours','hours']];
+  p.temp_sweep.temps_k.forEach((t,j)=>{
+    rows.push([p.name,'temp_sweep',t.toFixed(2),RD.fixed_stress,p.temp_sweep.log10_hours[j].toFixed(4),p.temp_sweep.hours[j].toFixed(2)]);
+  });
+  p.stress_sweep.stresses_mpa.forEach((s,j)=>{
+    rows.push([p.name,'stress_sweep',RD.fixed_temp,s.toFixed(2),p.stress_sweep.log10_hours[j].toFixed(4),p.stress_sweep.hours[j].toFixed(2)]);
+  });
+  downloadCsv(`vertex_${p.name}_sweep.csv`,rows);
+}
+document.getElementById('export-all-btn').addEventListener('click',function(){
+  const rows=[['product','sweep_type','temp_k','stress_mpa','log10_hours','hours']];
+  RD.products.forEach(p=>{
+    p.temp_sweep.temps_k.forEach((t,j)=>{
+      rows.push([p.name,'temp_sweep',t.toFixed(2),RD.fixed_stress,p.temp_sweep.log10_hours[j].toFixed(4),p.temp_sweep.hours[j].toFixed(2)]);
+    });
+    p.stress_sweep.stresses_mpa.forEach((s,j)=>{
+      rows.push([p.name,'stress_sweep',RD.fixed_temp,s.toFixed(2),p.stress_sweep.log10_hours[j].toFixed(4),p.stress_sweep.hours[j].toFixed(2)]);
+    });
+  });
+  downloadCsv('vertex_all_products_sweep.csv',rows);
+});
 
 /* ── Theme change → re-render all charts ── */
 window.addEventListener('vx-themechange',function(){

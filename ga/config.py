@@ -9,7 +9,6 @@ DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
 
 SCALER_PATH = DATA_DIR / "preprocessor.pkl"
-MODEL_PATH = MODELS_DIR / "resnet_best.pt"
 
 # ============================================================
 # [2] 합금 원소 목록

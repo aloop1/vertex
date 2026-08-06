@@ -78,4 +78,62 @@ function vxHeatmapScale() {
           [0.8, '#7fd4a8'], [1, '#1b8a6b']];
 }
 
+/* 공용 로딩 오버레이 — #lov 마크업이 있는 페이지라면 어디서든 사용 가능 */
+var _vxLovRaf = null, _vxLovStepTimer = null;
+function vxShowLoading(opts) {
+  opts = opts || {};
+  var title = opts.title || '처리 중...';
+  var steps = opts.steps && opts.steps.length ? opts.steps : ['처리 중…'];
+  var titleEl = document.querySelector('#lov .lv-title');
+  var stepEl = document.getElementById('lv-step');
+  if (titleEl) titleEl.textContent = title;
+
+  var canvas = document.getElementById('lv-canvas');
+  if (canvas) {
+    var ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    var pts = Array.from({ length: 70 }, function () {
+      return { x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+        r: Math.random() * 2 + .8, vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5,
+        a: Math.random() * .6 + .15 };
+    });
+    (function frame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (var i = 0; i < pts.length; i++) {
+        var p = pts[i]; p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x = canvas.width; if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(74,124,247,' + p.a + ')'; ctx.fill();
+        for (var j = i + 1; j < pts.length; j++) {
+          var dx = p.x - pts[j].x, dy = p.y - pts[j].y, d = Math.sqrt(dx * dx + dy * dy);
+          if (d < 110) {
+            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.strokeStyle = 'rgba(74,124,247,' + ((1 - d / 110) * .15) + ')';
+            ctx.lineWidth = .7; ctx.stroke();
+          }
+        }
+      }
+      _vxLovRaf = requestAnimationFrame(frame);
+    })();
+  }
+
+  if (stepEl) {
+    var si = 0; stepEl.textContent = steps[0];
+    clearInterval(_vxLovStepTimer);
+    _vxLovStepTimer = setInterval(function () {
+      si = (si + 1) % steps.length;
+      stepEl.textContent = steps[si];
+    }, opts.interval || 1200);
+  }
+  var lov = document.getElementById('lov');
+  if (lov) lov.classList.add('show');
+}
+function vxHideLoading() {
+  if (_vxLovRaf) { cancelAnimationFrame(_vxLovRaf); _vxLovRaf = null; }
+  clearInterval(_vxLovStepTimer);
+  var lov = document.getElementById('lov');
+  if (lov) lov.classList.remove('show');
+}
+
 document.addEventListener('DOMContentLoaded', vxInitToggle);

@@ -26,8 +26,6 @@
 .pareto-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,2fr);gap:16px;align-items:stretch}
 @media(max-width:980px){.pareto-layout{grid-template-columns:1fr}}
 .axis-bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-.axis-btn{background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-size:.78rem;cursor:pointer;transition:all .15s;font-family:inherit}
-.axis-btn.active,.axis-btn:hover{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
 .detail-panel{display:flex;flex-direction:column}
 .detail-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
 .detail-rank{font-size:1rem;font-weight:800;color:var(--accent)}
@@ -48,6 +46,11 @@ tbody tr:hover{background:var(--surface-3)}
 tbody tr.sel{background:color-mix(in srgb,var(--accent) 12%,var(--surface));outline:1px solid var(--accent)}
 .rank-chip{display:inline-flex;width:26px;height:26px;border-radius:50%;background:var(--surface-3);color:var(--text-dim);align-items:center;justify-content:center;font-weight:800;font-size:.72rem}
 tr.sel .rank-chip,tr:hover .rank-chip{background:var(--accent-strong);color:#fff}
+.filter-bar{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px}
+.filter-field{display:flex;flex-direction:column;gap:4px}
+.filter-field label{font-size:.7rem;color:var(--text-dim)}
+.filter-field input{width:120px;padding:7px 9px;font-size:.82rem}
+.filter-count{font-size:.76rem;color:var(--text-faint);align-self:center}
 </style>
 </head>
 <body>
@@ -66,9 +69,9 @@ tr.sel .rank-chip,tr:hover .rank-chip{background:var(--accent-strong);color:#fff
 <div class="pareto-layout">
   <div class="ch-box">
     <div class="axis-bar">
-      <button class="axis-btn active" data-x="cost" onclick="setParetoX('cost',this)">비용 vs 수명</button>
-      <button class="axis-btn" data-x="risk" onclick="setParetoX('risk',this)">위험도 vs 수명</button>
-      <button class="axis-btn" data-x="ood" onclick="setParetoX('ood',this)">OOD 거리 vs 수명</button>
+      <button class="vx-pill-btn active" data-x="cost" onclick="setParetoX('cost',this)">비용 vs 수명</button>
+      <button class="vx-pill-btn" data-x="risk" onclick="setParetoX('risk',this)">위험도 vs 수명</button>
+      <button class="vx-pill-btn" data-x="ood" onclick="setParetoX('ood',this)">OOD 거리 vs 수명</button>
     </div>
     <div id="ch-pareto" style="height:420px"></div>
     <p class="ref">점 색상 = 물리 위험도 · ★ = 최종 선정 후보 · 점 클릭 시 우측에 상세 정보 표시</p>
@@ -85,6 +88,23 @@ tr.sel .rank-chip,tr:hover .rank-chip{background:var(--accent-strong);color:#fff
 </div>
 
 <div class="sec">Pareto Top 후보 목록 <span id="cand-count" style="color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+<div class="filter-bar">
+  <div class="filter-field">
+    <label>최대 비용 ($/kg)</label>
+    <input type="number" id="f-cost" placeholder="제한 없음" step="1" min="0">
+  </div>
+  <div class="filter-field">
+    <label>최대 물리 위험도</label>
+    <input type="number" id="f-risk" placeholder="제한 없음" step="1" min="0">
+  </div>
+  <div class="filter-field">
+    <label>최소 수명 (시간)</label>
+    <input type="number" id="f-life" placeholder="제한 없음" step="100" min="0">
+  </div>
+  <button class="btn-ghost" onclick="resetFilters()">필터 초기화</button>
+  <span class="filter-count" id="filter-count"></span>
+  <button class="btn-primary" style="margin-left:auto;padding:9px 18px;font-size:.8rem" onclick="exportCandidatesCsv()">⬇ CSV 다운로드</button>
+</div>
 <div class="tbl-shell">
   <table id="cand-tbl">
     <thead><tr id="tbl-head"></tr></thead>
@@ -99,6 +119,7 @@ var CANDS = D.candidates || [];
 var BEST = D.best;
 var _selIdx = -1;
 var _paretoX = 'cost';
+var _filters = {maxCost: null, maxRisk: null, minLifeHrs: null};
 
 function fmt(v,d){if(v==null||v===undefined||isNaN(parseFloat(v)))return'—';return parseFloat(v).toFixed(d!=null?d:3);}
 function fmtHrs(log10){if(log10==null)return'—';var h=Math.pow(10,parseFloat(log10));if(h>87600)return(h/8760).toFixed(0)+'년';if(h>1000)return(h/1000).toFixed(1)+'k h';return h.toFixed(0)+' h';}
@@ -177,27 +198,43 @@ function paretoXDef(){
 
 function setParetoX(mode,btn){
   _paretoX=mode;
-  document.querySelectorAll('.axis-btn').forEach(function(b){b.classList.toggle('active',b===btn);});
+  document.querySelectorAll('.vx-pill-btn[data-x]').forEach(function(b){b.classList.toggle('active',b===btn);});
   renderPareto();
+}
+
+function getFilteredIdx(){
+  return CANDS.map(function(_,i){return i;}).filter(function(i){
+    var c=CANDS[i];
+    if(_filters.maxCost!=null && !(parseFloat(c.material_cost)<=_filters.maxCost)) return false;
+    if(_filters.maxRisk!=null && !(parseFloat(c.physics_risk)<=_filters.maxRisk)) return false;
+    if(_filters.minLifeHrs!=null){
+      var h=Math.pow(10,parseFloat(c.predicted_log_life));
+      if(!(h>=_filters.minLifeHrs)) return false;
+    }
+    return true;
+  });
 }
 
 function renderPareto(){
   if(!window.Plotly||!CANDS.length) return;
   var xd=paretoXDef(),c=vxChartColors();
-  var xs=CANDS.map(xd.get), ys=CANDS.map(function(cd){return cd.predicted_log_life;});
-  var risks=CANDS.map(function(cd){return cd.physics_risk!=null?cd.physics_risk:0;});
-  var texts=CANDS.map(function(cd,i){
+  var idxs=getFilteredIdx();
+  var xs=idxs.map(function(i){return xd.get(CANDS[i]);}), ys=idxs.map(function(i){return CANDS[i].predicted_log_life;});
+  var risks=idxs.map(function(i){return CANDS[i].physics_risk!=null?CANDS[i].physics_risk:0;});
+  var texts=idxs.map(function(i){
+    var cd=CANDS[i];
     return '#'+(i+1)+'<br>수명: '+fmtHrs(cd.predicted_log_life)+' (log₁₀='+fmt(cd.predicted_log_life,2)+')'
       +'<br>'+xd.title.split(' (')[0]+': '+xd.fmt(xd.get(cd))
       +'<br>위험도: '+fmt(cd.physics_risk,2)
       +'<br>Cr '+fmt(cd.Cr,2)+' · Mo '+fmt(cd.Mo,2)+' · W '+fmt(cd.W,2);
   });
   var traces=[{
-    x:xs,y:ys,mode:'markers',type:'scatter',name:'Pareto 후보',
+    x:xs,y:ys,mode:'markers',type:'scatter',name:'Pareto 후보 ('+idxs.length+'/'+CANDS.length+')',
     marker:{size:11,color:risks,colorscale:[[0,c.ok],[0.5,c.warn],[1,c.bad]],
             showscale:true,colorbar:{title:{text:'위험도',side:'right'},thickness:12,len:.8,tickfont:{color:c.text}},
             line:{color:c.line,width:1}},
     text:texts,hovertemplate:'%{text}<extra></extra>',
+    customdata:idxs,
     selected:{marker:{size:16,opacity:1}},unselected:{marker:{opacity:.75}},
   }];
   if(BEST){
@@ -219,7 +256,8 @@ function renderPareto(){
   el.on('plotly_click',function(ev){
     var pt=ev.points&&ev.points[0];
     if(!pt||pt.curveNumber!==0)return;
-    selectCandidate(pt.pointIndex);
+    var origIdx=pt.data.customdata?pt.data.customdata[pt.pointIndex]:pt.pointIndex;
+    selectCandidate(origIdx);
   });
 }
 
@@ -312,7 +350,7 @@ function renderTableHead(){
 }
 
 function sortAndRender(){
-  _order=CANDS.map(function(_,i){return i;});
+  _order=getFilteredIdx();
   if(_sortKey!=='_rank'){
     _order.sort(function(a,b){
       var va=parseFloat(CANDS[a][_sortKey]),vb=parseFloat(CANDS[b][_sortKey]);
@@ -322,18 +360,70 @@ function sortAndRender(){
   }
   renderTableHead();
   var tb=document.getElementById('tbl-body');tb.innerHTML='';
-  _order.forEach(function(idx){
+  _order.forEach(function(idx,rank){
     var cd=CANDS[idx],tr=document.createElement('tr');
     tr.dataset.idx=idx;
     if(idx===_selIdx)tr.classList.add('sel');
     TBL_COLS.forEach(function(col){
       var td=document.createElement('td');
-      td.innerHTML=col.key==='_rank'?'<span class="rank-chip">'+(idx+1)+'</span>':col.render(cd);
+      td.innerHTML=col.key==='_rank'?'<span class="rank-chip">'+(rank+1)+'</span>':col.render(cd);
       tr.appendChild(td);
     });
     tr.onclick=function(){selectCandidate(idx);};
     tb.appendChild(tr);
   });
+  document.getElementById('cand-count').textContent='('+_order.length+' / '+CANDS.length+'개)';
+  var fc=document.getElementById('filter-count');
+  fc.textContent=_order.length<CANDS.length?_order.length+'개 후보가 필터 조건에 일치':'';
+}
+
+/* ── Filters ── */
+function applyFilters(){
+  var cost=document.getElementById('f-cost').value;
+  var risk=document.getElementById('f-risk').value;
+  var life=document.getElementById('f-life').value;
+  _filters.maxCost=cost===''?null:parseFloat(cost);
+  _filters.maxRisk=risk===''?null:parseFloat(risk);
+  _filters.minLifeHrs=life===''?null:parseFloat(life);
+  sortAndRender();
+  renderPareto();
+}
+function resetFilters(){
+  document.getElementById('f-cost').value='';
+  document.getElementById('f-risk').value='';
+  document.getElementById('f-life').value='';
+  applyFilters();
+}
+['f-cost','f-risk','f-life'].forEach(function(id){
+  document.getElementById(id).addEventListener('input',applyFilters);
+});
+
+/* ── CSV export ── */
+function downloadCsv(filename,rows){
+  var csv=rows.map(function(r){return r.map(function(v){
+    if(v===null||v===undefined) return '';
+    var s=String(v);
+    return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  }).join(',');}).join('\r\n');
+  var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+var CSV_COLS=['predicted_log_life','material_cost','physics_risk','ood_distance','ood_is_out_of_distribution',
+  'KN','Ms_temp','CEQ','total_alloy_wt'].concat(ELEMS).concat(['Fe_balance']);
+function exportCandidatesCsv(){
+  var idxs=_order.length?_order:getFilteredIdx();
+  var header=['rank'].concat(CSV_COLS);
+  var rows=[header];
+  idxs.forEach(function(origIdx,rank){
+    var cd=CANDS[origIdx];
+    var row=[rank+1].concat(CSV_COLS.map(function(k){return cd[k]!=null?cd[k]:'';}));
+    rows.push(row);
+  });
+  downloadCsv('vertex_pareto_candidates.csv',rows);
 }
 
 document.getElementById('cand-count').textContent='('+CANDS.length+'개)';

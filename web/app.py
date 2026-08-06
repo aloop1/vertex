@@ -9,6 +9,7 @@ import ast
 import json
 import os
 import sys
+from datetime import datetime
 import matplotlib
 matplotlib.use("Agg")  # headless backend before any pyplot import
 
@@ -464,6 +465,7 @@ def predict():
         "temp_min":     temp_min,   "temp_max":  temp_max,
         "stress_min":   stress_min, "stress_max": stress_max,
         "ga":           ga_data,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     return render_template("result.html", payload=rd)
 

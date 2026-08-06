@@ -172,3 +172,25 @@ input[type="number"]:focus, .ctrl-inp:focus { outline: none; border-color: var(-
 }
 .ch-sub { font-size: .79rem; color: var(--text-dim); margin-bottom: 10px; }
 .ref { font-size: .72rem; color: var(--text-faint); margin-top: 8px; line-height: 1.55; }
+
+/* ── Pill / tab buttons (product selectors, axis toggles) ── */
+.vx-pill-btn {
+  background: var(--surface-3); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 6px 15px; border-radius: 6px; font-size: .79rem; cursor: pointer;
+  transition: all .15s; font-family: inherit;
+}
+.vx-pill-btn:hover { border-color: var(--accent); color: var(--text); }
+.vx-pill-btn.active { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+/* colored-tab variant: keeps a per-series left border for color coding (charts/products) */
+.vx-pill-btn.vx-pill-tab { background: var(--surface-2); border-left-width: 3px; padding: 6px 16px; }
+.vx-pill-btn.vx-pill-tab.active { background: var(--surface-3); border-color: var(--accent-strong); color: var(--text); }
+
+/* ── Loading overlay (shared across pages) ── */
+#lov { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 93%, transparent); z-index: 2000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+#lov.show { display: flex; }
+#lv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lv-content { position: relative; z-index: 1; text-align: center; pointer-events: none; }
+.lv-spin { width: 54px; height: 54px; border: 3px solid var(--border); border-top-color: var(--accent-strong); border-radius: 50%; animation: lv-rot 1s linear infinite; margin: 0 auto 22px; }
+@keyframes lv-rot { to { transform: rotate(360deg); } }
+.lv-title { font-size: 1.1rem; color: var(--accent); font-weight: 700; letter-spacing: .04em; margin-bottom: 10px; }
+.lv-step { font-size: .82rem; color: var(--text-dim); min-height: 20px; transition: opacity .3s; }
