@@ -1,1 +1,30 @@
 .env 
+.claude/image.png
+creep_curve_1920.png
+creep_curve_highres.png
+creep_curve_1920_transparent.png
+creep_curve_highres_transparent.png
+extrapolation_error_1920.png
+extrapolation_error_highres.png
+extrapolation_error_highres_transparent.png
+녹음 2026-06-20 133859.gif
+녹음_compressed_1280w.gif
+녹음_compressed_1920w.gif
+녹음_155813_compressed_1280w.gif
+녹음_155813_compressed_1920w.gif
+
+# 로컬 지식기반 (RAG) — 생성물/개인 자료는 커밋하지 않음
+knowledge_base/chroma_db/
+knowledge_base/manifest.json
+knowledge_base/domain_docs/*
+!knowledge_base/domain_docs/.gitkeep
+knowledge_base/__pycache__/
+
+# ── 이력서/포트폴리오 등 생성 문서 ────────────────────────
+# 소스가 아니고 바이너리라 diff가 불가능하다. 개인정보(연락처)도 들어 있어
+# 공개 저장소에 올라가면 안 된다. 원본은 Desktop/이력서/ 에서 관리한다.
+# 예외적으로 커밋해야 하면 git add -f 로 강제 추가할 것.
+*.docx
+*.pdf
+*.hwp
+*.pptx
