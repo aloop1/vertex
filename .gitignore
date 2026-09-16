@@ -1,4 +1,6 @@
 .env 
+__pycache__/
+*.py[cod]
 .claude/image.png
 creep_curve_1920.png
 creep_curve_highres.png
