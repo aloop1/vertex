@@ -29,6 +29,7 @@ from 데이터전처리 import (
     EXTRA_COLS,
 )
 from models.transformer_and_tree_ensemble import load_transformer_tree_predictor
+from ga.ood_analysis import analyze_ood_candidate
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 UPLOAD_DIR = WEB_DIR / "uploads"
@@ -87,6 +88,38 @@ def _predict_batch(fixed: dict, stresses: np.ndarray, temps: np.ndarray) -> np.n
         rows.append(row)
     pred_df = _PREDICTOR.predict_dataframe(pd.DataFrame(rows), batch_size=1024)
     return pred_df["log_lifetime"].to_numpy(dtype=float).reshape(shape)
+
+
+def _analyze_model_scope(composition: dict) -> dict:
+    """조성이 학습 분포에 얼마나 가까운지 현장/전문가용 정보로 정리한다."""
+    try:
+        result = analyze_ood_candidate(composition, top_k=3)
+        distance = float(result.get("ood_distance") or 0.0)
+        threshold = float(result.get("ood_distance_threshold") or 1.0)
+        percentile = result.get("ood_percentile")
+        ratio = distance / threshold if threshold > 0 else 0.0
+        if bool(result.get("ood_is_out_of_distribution")):
+            level = "outside"
+        elif ratio >= 0.8 or (percentile is not None and float(percentile) >= 90.0):
+            level = "boundary"
+        else:
+            level = "inside"
+        return {
+            "available": True,
+            "level": level,
+            "distance": distance,
+            "threshold": threshold,
+            "percentile": float(percentile) if percentile is not None else None,
+            "top_contributors": result.get("ood_top_contributors", [])[:3],
+            "nearest_neighbors": result.get("nearest_neighbors", [])[:3],
+        }
+    except Exception as exc:
+        print(f"[OOD analysis] {exc}")
+        return {
+            "available": False,
+            "level": "unknown",
+            "message": "학습 범위 정보를 계산하지 못했습니다.",
+        }
 
 def _finite_float(value, default: float) -> float:
     try:
@@ -437,6 +470,7 @@ def predict():
         comp_total = sum(key_comp.values())
         fe_bal = round(max(0.0, 100.0 - comp_total), 3)
         comp_pie = {"Fe (bal.)": fe_bal, **key_comp} if fe_bal > 0 else dict(key_comp)
+        model_scope = _analyze_model_scope(key_comp)
 
         # Heat treatment stages for thermal cycle chart
         ht_stages = []
@@ -453,6 +487,7 @@ def predict():
             "composition":    key_comp,
             "heat_treatment": key_ht,
             "comp_pie":       comp_pie,
+            "model_scope":    model_scope,
             "ht_stages":      ht_stages,
             "_features":      fixed,          # stored for client-side /resweep calls
             "temp_sweep": {

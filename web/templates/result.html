@@ -112,6 +112,21 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 .margin-meter{height:7px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin-top:10px}
 .margin-fill{height:100%;width:0;border-radius:inherit;background:var(--accent-grad);transition:width .45s ease}
 .decision-text{font-size:.82rem;color:var(--text-dim);line-height:1.55;margin-top:6px;max-width:440px}
+.scope-panel{padding:16px 18px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:10px}
+.scope-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.scope-title{font-size:.78rem;font-weight:800;color:var(--text);letter-spacing:.03em}
+.scope-badge{font-size:.72rem;font-weight:800;padding:5px 10px;border-radius:99px;border:1px solid}
+.scope-badge.inside{color:var(--ok);border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.scope-badge.boundary{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.scope-badge.outside{color:var(--bad);border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.scope-badge.unknown{color:var(--text-dim);border-color:var(--border)}
+.scope-desc{font-size:.8rem;color:var(--text-dim);line-height:1.55}
+.scope-meter{height:8px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin:11px 0 7px;position:relative}
+.scope-fill{height:100%;width:0;border-radius:inherit;transition:width .45s ease,background .3s}
+.scope-scale{display:flex;justify-content:space-between;color:var(--text-faint);font-size:.65rem}
+.scope-reasons{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.scope-reason{font-size:.7rem;padding:4px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim)}
+.scope-expert{font-size:.7rem;color:var(--text-faint);margin-top:10px;line-height:1.55}
 .dash-box,.stat-card,.prod-card,.ch-box{animation:resultIn .48s ease both}
 .stats .stat-card:nth-child(2),.prod-card:nth-child(2){animation-delay:.08s}
 @keyframes resultIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
@@ -266,6 +281,14 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
           <div class="decision-text" id="decision-text">—</div>
         </div>
         <div class="life-badge safe" id="life-badge">—</div>
+      </div>
+      <div class="scope-panel" id="scope-panel">
+        <div class="scope-head"><div class="scope-title">모델 적용 범위</div><div class="scope-badge unknown" id="scope-badge">확인 중</div></div>
+        <div class="scope-desc" id="scope-desc">업로드한 합금이 학습 데이터와 얼마나 유사한지 확인합니다.</div>
+        <div class="scope-meter" aria-hidden="true"><div class="scope-fill" id="scope-fill"></div></div>
+        <div class="scope-scale"><span>학습 데이터 중심</span><span>범위 경계</span></div>
+        <div class="scope-reasons" id="scope-reasons"></div>
+        <div class="scope-expert" id="scope-expert"></div>
       </div>
     </div>
   </div>
@@ -650,6 +673,7 @@ function updateDashboard(){
   const marginFill=document.getElementById('margin-fill');
   marginFill.style.width=Math.min(100,margin*50)+'%';
   marginFill.style.background=cls==='safe'?'var(--ok)':cls==='caution'?'var(--warn)':cls==='danger'?'var(--danger)':'var(--bad)';
+  renderModelScope(pidx);
   if(!window.Plotly){
     setChartFallback('ch-dash','차트 라이브러리를 불러오는 중입니다.<br>수명 수치 계산은 완료되었습니다.');
     return;
@@ -815,6 +839,38 @@ function toggleDetails(){
   arr.innerHTML=(_detOpen?'접기':'펼치기')+' &nbsp;<span class="arr">▼</span>';
   document.querySelector('.det-header').setAttribute('aria-expanded',String(_detOpen));
   if(_detOpen&&!_detRendered){_detRendered=true;setTimeout(()=>{renderTempChart();renderStressChart();renderLMPChart();renderHeatmap(0);},100);}
+}
+
+function renderModelScope(pidx){
+  const scope=RD.products[pidx].model_scope||{available:false,level:'unknown'};
+  const badge=document.getElementById('scope-badge'),desc=document.getElementById('scope-desc');
+  const fill=document.getElementById('scope-fill'),reasons=document.getElementById('scope-reasons');
+  const expert=document.getElementById('scope-expert');
+  const labels={inside:'학습 범위 내',boundary:'범위 경계',outside:'학습 범위 밖',unknown:'확인 불가'};
+  badge.className='scope-badge '+scope.level;badge.textContent=labels[scope.level]||labels.unknown;
+  if(!scope.available){
+    desc.textContent=scope.message||'모델 적용 범위를 계산하지 못했습니다.';
+    fill.style.width='0';reasons.innerHTML='';expert.textContent='';return;
+  }
+  const copy={
+    inside:'학습 데이터와 유사한 조성입니다. 이 모델이 비교적 익숙한 소재 범위입니다.',
+    boundary:'학습 데이터의 경계에 가까운 조성입니다. 결과를 참고하되 주요 원소를 확인하세요.',
+    outside:'학습 데이터에서 보기 드문 조성입니다. 예측값을 참고용으로 사용하고 전문가 검토를 권장합니다.'
+  };
+  desc.textContent=copy[scope.level];
+  const pct=scope.percentile==null?Math.min(100,(scope.distance/scope.threshold)*95):Math.max(0,Math.min(100,scope.percentile));
+  fill.style.width=pct+'%';
+  fill.style.background=scope.level==='inside'?'var(--ok)':scope.level==='boundary'?'var(--warn)':'var(--bad)';
+  const top=scope.top_contributors||[];
+  reasons.innerHTML=top.map(function(r){
+    const input=Number(r.candidate_value||0),mean=Number(r.reference_mean||0);
+    return '<span class="scope-reason">'+r.element+' 입력 '+input.toFixed(input<.01?4:2)+' · 기준 '+mean.toFixed(mean<.01?4:2)+'</span>';
+  }).join('');
+  let detail='Mahalanobis 거리 '+Number(scope.distance).toFixed(2)+' / 경계 '+Number(scope.threshold).toFixed(2);
+  if(scope.percentile!=null) detail+=' · 학습 데이터 거리 백분위 '+Number(scope.percentile).toFixed(1)+'%';
+  const near=(scope.nearest_neighbors||[])[0];
+  if(near) detail+=' · 가장 유사한 실험: '+(near.temp!=null?Math.round(near.temp)+' K':'온도 정보 없음')+', '+(near.stress!=null?Number(near.stress).toFixed(0)+' MPa':'응력 정보 없음');
+  expert.textContent=detail;
 }
 document.querySelector('.det-header').addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleDetails();}});
 
