@@ -58,6 +58,7 @@ function vxBaseLayout(extra) {
     xaxis: { gridcolor: c.grid, linecolor: c.line, zerolinecolor: c.line },
     yaxis: { gridcolor: c.grid, linecolor: c.line, zerolinecolor: c.line },
     hovermode: 'x unified',
+    transition: { duration: 280, easing: 'cubic-in-out' },
   };
   if (!extra) return base;
   var out = Object.assign({}, base, extra);
@@ -79,13 +80,15 @@ function vxHeatmapScale() {
 }
 
 /* 공용 로딩 오버레이 — #lov 마크업이 있는 페이지라면 어디서든 사용 가능 */
-var _vxLovRaf = null, _vxLovStepTimer = null;
+var _vxLovRaf = null, _vxLovStepTimer = null, _vxLovElapsedTimer = null;
 function vxShowLoading(opts) {
   opts = opts || {};
   var title = opts.title || '처리 중...';
   var steps = opts.steps && opts.steps.length ? opts.steps : ['처리 중…'];
   var titleEl = document.querySelector('#lov .lv-title');
   var stepEl = document.getElementById('lv-step');
+  var pipelineEl = document.getElementById('lv-pipeline');
+  var elapsedEl = document.getElementById('lv-elapsed');
   if (titleEl) titleEl.textContent = title;
 
   var canvas = document.getElementById('lv-canvas');
@@ -120,11 +123,28 @@ function vxShowLoading(opts) {
 
   if (stepEl) {
     var si = 0; stepEl.textContent = steps[0];
+    function renderPipeline() {
+      if (!pipelineEl) return;
+      pipelineEl.innerHTML = steps.map(function (step, i) {
+        var cls = i < si ? 'done' : i === si ? 'active' : '';
+        return '<span class="lv-stage ' + cls + '">' + step.replace(/…/g, '') + '</span>';
+      }).join('');
+    }
+    renderPipeline();
     clearInterval(_vxLovStepTimer);
     _vxLovStepTimer = setInterval(function () {
-      si = (si + 1) % steps.length;
+      if (si < steps.length - 1) si += 1;
       stepEl.textContent = steps[si];
+      renderPipeline();
     }, opts.interval || 1200);
+  }
+  var startedAt = Date.now();
+  clearInterval(_vxLovElapsedTimer);
+  if (elapsedEl) {
+    elapsedEl.textContent = '경과 0초';
+    _vxLovElapsedTimer = setInterval(function () {
+      elapsedEl.textContent = '경과 ' + Math.floor((Date.now() - startedAt) / 1000) + '초';
+    }, 250);
   }
   var lov = document.getElementById('lov');
   if (lov) lov.classList.add('show');
@@ -132,8 +152,56 @@ function vxShowLoading(opts) {
 function vxHideLoading() {
   if (_vxLovRaf) { cancelAnimationFrame(_vxLovRaf); _vxLovRaf = null; }
   clearInterval(_vxLovStepTimer);
+  clearInterval(_vxLovElapsedTimer);
   var lov = document.getElementById('lov');
   if (lov) lov.classList.remove('show');
 }
 
-document.addEventListener('DOMContentLoaded', vxInitToggle);
+/* 전체 화면의 은은한 결정 격자 배경 */
+var _vxAmbientRaf = null;
+function vxInitAmbient() {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var canvas = document.createElement('canvas');
+  canvas.id = 'vx-ambient';
+  canvas.setAttribute('aria-hidden', 'true');
+  document.body.insertBefore(canvas, document.body.firstChild);
+  var ctx = canvas.getContext('2d'), points = [], mouse = { x: -9999, y: -9999 };
+  function resize() {
+    var ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.floor(window.innerWidth * ratio); canvas.height = Math.floor(window.innerHeight * ratio);
+    canvas.style.width = window.innerWidth + 'px'; canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    points = Array.from({ length: Math.max(18, Math.min(34, Math.floor(window.innerWidth / 45))) }, function () {
+      return { x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight,
+        vx: (Math.random() - .5) * .12, vy: (Math.random() - .5) * .12, r: Math.random() * 1.2 + .6 };
+    });
+  }
+  function frame() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    var dark = vxTheme() === 'dark';
+    for (var i = 0; i < points.length; i++) {
+      var p = points[i], dxm = p.x - mouse.x, dym = p.y - mouse.y, dm = Math.sqrt(dxm * dxm + dym * dym);
+      if (dm < 130 && dm > 1) { p.x += dxm / dm * .08; p.y += dym / dm * .08; }
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < -10) p.x = window.innerWidth + 10; if (p.x > window.innerWidth + 10) p.x = -10;
+      if (p.y < -10) p.y = window.innerHeight + 10; if (p.y > window.innerHeight + 10) p.y = -10;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = dark ? 'rgba(126,184,247,.24)' : 'rgba(45,95,208,.16)'; ctx.fill();
+      for (var j = i + 1; j < points.length; j++) {
+        var dx = p.x - points[j].x, dy = p.y - points[j].y, d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 150) {
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(points[j].x, points[j].y);
+          ctx.strokeStyle = dark ? 'rgba(126,184,247,' + ((1 - d / 150) * .08) + ')' : 'rgba(45,95,208,' + ((1 - d / 150) * .06) + ')';
+          ctx.lineWidth = .7; ctx.stroke();
+        }
+      }
+    }
+    _vxAmbientRaf = requestAnimationFrame(frame);
+  }
+  window.addEventListener('resize', resize, { passive: true });
+  window.addEventListener('pointermove', function (e) { mouse.x = e.clientX; mouse.y = e.clientY; }, { passive: true });
+  window.addEventListener('pointerleave', function () { mouse.x = -9999; mouse.y = -9999; }, { passive: true });
+  resize(); frame();
+}
+
+document.addEventListener('DOMContentLoaded', function () { vxInitToggle(); vxInitAmbient(); });

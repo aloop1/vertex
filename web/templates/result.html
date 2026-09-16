@@ -94,6 +94,13 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 .sl-note{font-size:.74rem;color:var(--text-faint)}
 .chart-col{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}
 .life-row{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(200px,1fr) auto;align-items:center;gap:20px;padding:16px 18px;background:var(--surface-2);border-radius:10px;border:1px solid var(--border-soft)}
+.life-row{position:relative;overflow:hidden;transition:border-color .3s,box-shadow .3s}
+.life-row::after{content:"";position:absolute;inset:-60% auto -60% -35%;width:24%;transform:rotate(16deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);pointer-events:none;opacity:0}
+.life-row.is-updating::after{animation:lifeSweep .7s ease}
+.life-row.safe-state{border-color:color-mix(in srgb,var(--ok) 45%,var(--border-soft));box-shadow:0 0 28px color-mix(in srgb,var(--ok) 8%,transparent)}
+.life-row.caution-state{border-color:color-mix(in srgb,var(--warn) 50%,var(--border-soft));box-shadow:0 0 28px color-mix(in srgb,var(--warn) 8%,transparent)}
+.life-row.danger-state,.life-row.critical-state{border-color:color-mix(in srgb,var(--bad) 50%,var(--border-soft));box-shadow:0 0 28px color-mix(in srgb,var(--bad) 8%,transparent)}
+@keyframes lifeSweep{0%{left:-35%;opacity:0}20%{opacity:1}100%{left:125%;opacity:0}}
 .life-big{font-size:2rem;font-weight:800;transition:color .4s;line-height:1.2}
 .life-unit{font-size:.78rem;color:var(--text-faint);margin-top:6px}
 .life-hours{font-size:1rem;color:var(--text);font-weight:700}
@@ -269,7 +276,7 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
     </div>
     <div class="chart-col">
       <div id="ch-dash" style="height:300px"></div>
-      <div class="life-row">
+      <div class="life-row" id="life-row">
         <div>
           <div class="life-big" id="life-val">—</div>
           <div class="life-unit">현재 조건에서의 예상 크립 수명</div>
@@ -633,6 +640,21 @@ function hideLoading(){ vxHideLoading(); }
 /* ── Dashboard ── */
 let _dashIdx=0,_curTemp=RD.fixed_temp,_curStress=RD.fixed_stress;
 let _targetHours=Math.max(1,Number(RD.target_hours)||10000);
+let _displayHours=null,_lifeRaf=null;
+
+function animateLifeValue(nextHours){
+  const el=document.getElementById('life-val');
+  const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce||_displayHours===null){el.textContent=formatHoursCompact(nextHours);_displayHours=nextHours;return;}
+  if(_lifeRaf)cancelAnimationFrame(_lifeRaf);
+  const start=_displayHours,started=performance.now(),duration=420;
+  function frame(now){
+    const p=Math.min(1,(now-started)/duration),eased=1-Math.pow(1-p,3);
+    const value=start+(nextHours-start)*eased;_displayHours=value;el.textContent=formatHoursCompact(value);
+    if(p<1)_lifeRaf=requestAnimationFrame(frame);else{_displayHours=nextHours;_lifeRaf=null;}
+  }
+  _lifeRaf=requestAnimationFrame(frame);
+}
 
 function bilinearInterp(pidx,temp_k,stress_mpa){
   const hm=RD.products[pidx].heatmap;
@@ -660,8 +682,11 @@ function updateDashboard(){
   else if(margin>=.3){badge='전문가 확인 필요';cls='danger';decision='목표 시간보다 예측 수명이 짧습니다. 운전 조건과 소재 데이터를 전문가가 확인해야 합니다.';}
   else{badge='목표 미달';cls='critical';decision='현재 조건에서 목표 운전 시간을 충족하기 어렵습니다. 조건 변경 후 다시 분석하세요.';}
   const lifeEl=document.getElementById('life-val');
-  lifeEl.textContent=formatHoursCompact(hrs);
+  animateLifeValue(hrs);
   lifeEl.style.color=cls==='safe'?cc.ok:cls==='caution'?cc.warn:cls==='danger'?cc.danger:cc.bad;
+  const lifeRow=document.getElementById('life-row');
+  lifeRow.className='life-row '+cls+'-state';
+  lifeRow.classList.remove('is-updating');void lifeRow.offsetWidth;lifeRow.classList.add('is-updating');
   document.getElementById('life-hours').textContent=`절대 시간 기준 ${formatNumberKo(hrs, hrs >= 100 ? 0 : 1)}시간`;
   document.getElementById('life-sub').textContent=`목표 대비 ${margin.toFixed(2)}배 · ${formatYearsCompact(hrs)}`;
   document.getElementById('life-meta').textContent=`log10 수명 ${logL.toFixed(3)} · 온도 ${Math.round(_curTemp)} K · 응력 ${_curStress.toFixed(0)} MPa`;
