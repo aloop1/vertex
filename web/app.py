@@ -576,6 +576,7 @@ def predict():
         "temp_min":     temp_min,   "temp_max":  temp_max,
         "stress_min":   stress_min, "stress_max": stress_max,
         "target_hours": target_hours,
+        "model_name":   _PREDICTOR.artifact_path.name,
         "ga":           ga_data,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }

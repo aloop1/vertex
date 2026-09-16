@@ -175,6 +175,26 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 #export-all-btn{font-size:.78rem}
 @media(max-width:640px){.composition-grid{grid-template-columns:1fr}.comp-kpis{grid-template-columns:1fr}.elem-list{grid-template-columns:1fr}}
 .pill-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.report-modal{position:fixed;inset:0;z-index:3000;background:rgba(5,8,15,.78);backdrop-filter:blur(8px);display:none;align-items:flex-start;justify-content:center;padding:28px;overflow:auto}
+.report-modal.open{display:flex}.report-shell{width:min(820px,100%)}
+.report-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px}
+.report-sheet{background:#fff;color:#172033;border-radius:12px;padding:34px 38px;box-shadow:0 20px 70px rgba(0,0,0,.35);font-family:'Pretendard Variable',Pretendard,sans-serif}
+.report-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding-bottom:18px;border-bottom:3px solid #315fca}
+.report-brand{font-size:1.35rem;font-weight:900;color:#315fca}.report-title{font-size:1.1rem;font-weight:800;margin-top:5px}.report-date{font-size:.72rem;color:#667085;text-align:right;line-height:1.6}
+.report-verdict{margin:20px 0;padding:18px 20px;border-radius:10px;background:#f4f7fc;border-left:5px solid #315fca}
+.report-verdict h2{font-size:1.35rem;margin-bottom:6px}.report-verdict p{font-size:.82rem;color:#475467;line-height:1.55}
+.report-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}.report-kpi{border:1px solid #dfe5ef;border-radius:9px;padding:13px}.report-kpi span{font-size:.68rem;color:#667085}.report-kpi b{display:block;margin-top:5px;font-size:1rem;color:#172033}
+.report-section{margin-top:18px}.report-section h3{font-size:.75rem;color:#315fca;text-transform:uppercase;letter-spacing:.08em;padding-bottom:6px;border-bottom:1px solid #dfe5ef;margin-bottom:9px}
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}.report-row{display:flex;justify-content:space-between;gap:12px;font-size:.76rem;padding:5px 0;border-bottom:1px dotted #e3e7ee}.report-row span{color:#667085}.report-row b{text-align:right}
+.report-chips{display:flex;flex-wrap:wrap;gap:6px}.report-chip{font-size:.7rem;padding:5px 8px;border-radius:6px;background:#edf2fb;border:1px solid #d9e2f3}
+.report-foot{font-size:.66rem;color:#667085;line-height:1.55;margin-top:22px;padding-top:12px;border-top:1px solid #dfe5ef}
+@media(max-width:640px){.report-modal{padding:10px}.report-sheet{padding:24px 20px}.report-kpis,.report-grid{grid-template-columns:1fr}}
+@media print{
+  @page{size:A4;margin:10mm}
+  body>*:not(.report-modal){display:none!important}
+  .report-modal{display:block!important;position:static;background:#fff;padding:0;overflow:visible}
+  .report-shell{width:100%}.report-actions{display:none!important}.report-sheet{box-shadow:none;border-radius:0;padding:0}
+}
 </style>
 </head>
 <body>
@@ -183,6 +203,7 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
     {% if payload.generated_at %}<span class="hdr-timestamp">생성 {{ payload.generated_at }}</span>{% endif %}
   </h1>
   <div class="hdr-right">
+    <button class="btn-ghost" id="report-btn" onclick="openFieldReport()">▣ 현장 보고서</button>
     <button class="btn-ghost" id="export-all-btn" title="모든 제품의 온도·응력 sweep 데이터를 CSV로 저장">⬇ 전체 CSV</button>
     <a class="btn-ghost" href="/alloy_design">⚗ 합금 설계</a>
     <a class="btn-ghost" href="/">← 새 분석</a>
@@ -364,6 +385,16 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 </div>
 
 </div><!-- /wrap -->
+
+<div class="report-modal" id="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title">
+  <div class="report-shell">
+    <div class="report-actions">
+      <button class="btn-ghost" onclick="closeFieldReport()">닫기</button>
+      <button class="btn-primary" onclick="window.print()">인쇄 · PDF 저장</button>
+    </div>
+    <article class="report-sheet" id="field-report"></article>
+  </div>
+</div>
 
 <script>
 const RD = {{ payload | tojson }};
@@ -668,19 +699,23 @@ function bilinearInterp(pidx,temp_k,stress_mpa){
   return grid[si][ti]*(1-ft)*(1-fs)+grid[si][ti+1]*ft*(1-fs)+grid[si+1][ti]*(1-ft)*fs+grid[si+1][ti+1]*ft*fs;
 }
 
+function decisionFor(hours,targetHours){
+  const margin=hours/targetHours;
+  if(margin>=2)return{margin,badge:'목표 충분히 충족',cls:'safe',decision:`목표 시간의 ${margin.toFixed(1)}배로 예측됩니다. 현재 조건을 유지하며 정기 점검하세요.`};
+  if(margin>=1)return{margin,badge:'목표 충족',cls:'safe',decision:`목표 시간의 ${margin.toFixed(1)}배로 예측됩니다. 운전 조건 변화가 큰 경우 다시 분석하세요.`};
+  if(margin>=.7)return{margin,badge:'검토 필요',cls:'caution',decision:`목표 시간에 약 ${formatNumberKo(targetHours-hours,0)}시간 부족합니다. 조건 완화 또는 전문가 검토가 필요합니다.`};
+  if(margin>=.3)return{margin,badge:'전문가 확인 필요',cls:'danger',decision:'목표 시간보다 예측 수명이 짧습니다. 운전 조건과 소재 데이터를 전문가가 확인해야 합니다.'};
+  return{margin,badge:'목표 미달',cls:'critical',decision:'현재 조건에서 목표 운전 시간을 충족하기 어렵습니다. 조건 변경 후 다시 분석하세요.'};
+}
+
 function updateDashboard(){
   const pidx=_dashIdx,hm=RD.products[pidx].heatmap;
   const logL=bilinearInterp(pidx,_curTemp,_curStress);
   const hrs=Math.pow(10,logL);
   const curve=hm.temps_k.map(t=>bilinearInterp(pidx,t,_curStress));
   const cc=vxChartColors();
-  const margin=hrs/_targetHours;
-  let badge,cls,decision;
-  if(margin>=2){badge='목표 충분히 충족';cls='safe';decision=`목표 시간의 ${margin.toFixed(1)}배로 예측됩니다. 현재 조건을 유지하며 정기 점검하세요.`;}
-  else if(margin>=1){badge='목표 충족';cls='safe';decision=`목표 시간의 ${margin.toFixed(1)}배로 예측됩니다. 운전 조건 변화가 큰 경우 다시 분석하세요.`;}
-  else if(margin>=.7){badge='검토 필요';cls='caution';decision=`목표 시간에 약 ${formatNumberKo(_targetHours-hrs,0)}시간 부족합니다. 조건 완화 또는 전문가 검토가 필요합니다.`;}
-  else if(margin>=.3){badge='전문가 확인 필요';cls='danger';decision='목표 시간보다 예측 수명이 짧습니다. 운전 조건과 소재 데이터를 전문가가 확인해야 합니다.';}
-  else{badge='목표 미달';cls='critical';decision='현재 조건에서 목표 운전 시간을 충족하기 어렵습니다. 조건 변경 후 다시 분석하세요.';}
+  const assessment=decisionFor(hrs,_targetHours);
+  const {margin,badge,cls,decision}=assessment;
   const lifeEl=document.getElementById('life-val');
   animateLifeValue(hrs);
   lifeEl.style.color=cls==='safe'?cc.ok:cls==='caution'?cc.warn:cls==='danger'?cc.danger:cc.bad;
@@ -898,6 +933,35 @@ function renderModelScope(pidx){
   if(near) detail+=' · 가장 유사한 실험: '+(near.temp!=null?Math.round(near.temp)+' K':'온도 정보 없음')+', '+(near.stress!=null?Number(near.stress).toFixed(0)+' MPa':'응력 정보 없음');
   expert.textContent=detail;
 }
+
+function esc(value){
+  return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});
+}
+
+function openFieldReport(){
+  const product=RD.products[_dashIdx],logL=bilinearInterp(_dashIdx,_curTemp,_curStress),hours=Math.pow(10,logL);
+  const assessment=decisionFor(hours,_targetHours),scope=product.model_scope||{available:false,level:'unknown'};
+  const scopeLabels={inside:'학습 범위 내',boundary:'학습 범위 경계',outside:'학습 범위 밖',unknown:'확인 불가'};
+  const stateColors={safe:'#168c68',caution:'#a87700',danger:'#c35d1b',critical:'#c63838'};
+  const composition=Object.entries(product.composition||{}).filter(function(x){return Number(x[1])>0;}).sort(function(a,b){return Number(b[1])-Number(a[1]);}).slice(0,12);
+  const compHtml=composition.map(function(x){return '<span class="report-chip"><b>'+esc(x[0])+'</b> '+Number(x[1]).toFixed(Number(x[1])<.01?4:2)+' wt%</span>';}).join('')||'<span>입력된 조성 정보 없음</span>';
+  const contrib=(scope.top_contributors||[]).map(function(r){return '<span class="report-chip"><b>'+esc(r.element)+'</b> 입력 '+Number(r.candidate_value||0).toFixed(4)+' / 기준 '+Number(r.reference_mean||0).toFixed(4)+'</span>';}).join('')||'<span>추가 검토 원소 없음</span>';
+  const ht=(product.ht_stages||[]).map(function(s){return '<div class="report-row"><span>'+esc(s.label)+'</span><b>'+Number(s.temp_c).toFixed(1)+'°C · '+Number(s.time_h).toFixed(2)+' h</b></div>';}).join('')||'<div class="report-row"><span>열처리</span><b>입력 정보 없음</b></div>';
+  const scopeDetail=scope.available?'거리 '+Number(scope.distance).toFixed(2)+' / 경계 '+Number(scope.threshold).toFixed(2)+(scope.percentile!=null?' · 백분위 '+Number(scope.percentile).toFixed(1)+'%':''):'계산 불가';
+  document.getElementById('field-report').innerHTML=`
+    <header class="report-head"><div><div class="report-brand">VERTEX</div><div class="report-title" id="report-dialog-title">크립 수명 현장 분석 보고서</div></div><div class="report-date">분석 ${esc(RD.generated_at||new Date().toLocaleString('ko-KR'))}<br>제품 ${esc(product.name)}<br>모델 ${esc(RD.model_name||'—')}</div></header>
+    <section class="report-verdict" style="border-left-color:${stateColors[assessment.cls]}"><h2 style="color:${stateColors[assessment.cls]}">${esc(assessment.badge)}</h2><p>${esc(assessment.decision)}</p></section>
+    <div class="report-kpis"><div class="report-kpi"><span>예상 크립 수명</span><b>${esc(formatHoursCompact(hours))}</b></div><div class="report-kpi"><span>목표 대비 여유</span><b>${assessment.margin.toFixed(2)}배</b></div><div class="report-kpi"><span>모델 적용 범위</span><b>${esc(scopeLabels[scope.level]||scopeLabels.unknown)}</b></div></div>
+    <section class="report-section"><h3>운전 및 분석 조건</h3><div class="report-grid"><div class="report-row"><span>현재 온도</span><b>${(_curTemp-273.15).toFixed(1)}°C (${Math.round(_curTemp)} K)</b></div><div class="report-row"><span>현재 응력</span><b>${_curStress.toFixed(0)} MPa</b></div><div class="report-row"><span>목표 운전 시간</span><b>${formatNumberKo(_targetHours,0)} h</b></div><div class="report-row"><span>예측 로그 수명</span><b>${logL.toFixed(3)}</b></div></div></section>
+    <section class="report-section"><h3>모델 적용 범위 근거</h3><div class="report-row"><span>OOD 분석</span><b>${esc(scopeDetail)}</b></div><div class="report-chips" style="margin-top:9px">${contrib}</div></section>
+    <section class="report-section"><h3>주요 합금 조성</h3><div class="report-chips">${compHtml}</div></section>
+    <section class="report-section"><h3>열처리 조건</h3><div class="report-grid">${ht}</div></section>
+    <footer class="report-foot">본 보고서는 입력된 소재 조성·열처리·운전 조건과 AI 예측 모델을 기반으로 작성된 의사결정 보조 자료입니다. 학습 범위 경계 또는 범위 밖 결과는 전문가 검토와 현장 검사 결과를 함께 사용하세요.</footer>`;
+  document.getElementById('report-modal').classList.add('open');document.body.style.overflow='hidden';
+}
+function closeFieldReport(){document.getElementById('report-modal').classList.remove('open');document.body.style.overflow='';}
+document.getElementById('report-modal').addEventListener('click',function(e){if(e.target===this)closeFieldReport();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeFieldReport();});
 document.querySelector('.det-header').addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleDetails();}});
 
 /* ── Recalculate ── */
