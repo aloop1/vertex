@@ -12,6 +12,9 @@
 .prod-export-btn{background:var(--surface-3);border:1px solid var(--border);color:var(--text-dim);font-size:.68rem;padding:3px 8px;border-radius:6px;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
 .prod-export-btn:hover{border-color:var(--accent);color:var(--accent)}
 #ctrl{background:var(--surface-2);border-bottom:1px solid var(--border);padding:12px 28px;display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;position:sticky;top:63px;z-index:99}
+#ctrl.collapsed{padding:8px 28px;justify-content:flex-end}
+#ctrl.collapsed .ctrl-grp,#ctrl.collapsed .ctrl-sep,#ctrl.collapsed #apply-btn{display:none}
+.ctrl-toggle{align-self:center}
 .ctrl-grp{display:flex;flex-direction:column;gap:6px}
 .ctrl-grp-title{font-size:.7rem;font-weight:800;color:var(--accent);letter-spacing:.07em;text-transform:uppercase}
 .ctrl-row{display:flex;gap:10px;align-items:center}
@@ -20,7 +23,7 @@
 .ctrl-inp{width:110px;padding:7px 9px;font-size:.82rem}
 .ctrl-sep{width:1px;height:44px;background:var(--border);margin:0 6px}
 #apply-btn{margin-left:auto;padding:9px 22px;font-size:.85rem}
-.wrap{max-width:1440px;margin:0 auto;padding:24px 28px 48px}
+.wrap{max-width:1440px;margin:0 auto;padding:24px 28px 48px;display:flex;flex-direction:column}
 .scroll-shell{max-width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:10px}
 .prod-grid{display:flex;flex-wrap:nowrap;gap:16px;width:max-content;min-width:100%}
 .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;flex:0 0 360px;max-width:360px}
@@ -80,6 +83,7 @@
 .sl-wrap{display:flex;flex-direction:column;gap:10px;user-select:none;background:var(--surface-2);border-radius:12px;border:1px solid var(--border-soft);padding:14px 16px}
 .sl-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .sl-val{font-size:.92rem;font-weight:700;color:var(--accent);min-width:110px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Courier New',monospace}
+.condition-input{width:128px!important;color:var(--accent)!important;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
 .sl-track{display:flex;align-items:center;justify-content:center}
 input.vslider{-webkit-appearance:none;appearance:none;width:100%;height:8px;cursor:pointer;background:transparent;outline:none}
 input.vslider::-webkit-slider-runnable-track{height:8px;background:var(--surface-3);border-radius:999px}
@@ -100,6 +104,17 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 .life-badge.caution{background:color-mix(in srgb,var(--warn) 14%,var(--surface));color:var(--warn);border-color:var(--warn)}
 .life-badge.danger{background:color-mix(in srgb,var(--danger) 14%,var(--surface));color:var(--danger);border-color:var(--danger)}
 .life-badge.critical{background:color-mix(in srgb,var(--bad) 14%,var(--surface));color:var(--bad);border-color:var(--bad)}
+.decision-sec{order:1}.dash-box{order:2}.summary-sec{order:3}.stats{order:4}.product-sec{order:5}.composition-grid{order:6}.heat-sec{order:7}.ht-layout{order:8}#ga-section{order:9}.det-section{order:10}
+.decision-lead{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:14px}
+.decision-lead h2{font-size:1.45rem;letter-spacing:-.025em;margin-bottom:5px}
+.decision-lead p{font-size:.82rem;color:var(--text-dim);line-height:1.6}
+.target-card{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,var(--surface-2)),var(--surface-2))}
+.margin-meter{height:7px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin-top:10px}
+.margin-fill{height:100%;width:0;border-radius:inherit;background:var(--accent-grad);transition:width .45s ease}
+.decision-text{font-size:.82rem;color:var(--text-dim);line-height:1.55;margin-top:6px;max-width:440px}
+.dash-box,.stat-card,.prod-card,.ch-box{animation:resultIn .48s ease both}
+.stats .stat-card:nth-child(2),.prod-card:nth-child(2){animation-delay:.08s}
+@keyframes resultIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 /* Collapsible details */
 .det-section{margin-top:28px}
 .det-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border);user-select:none}
@@ -117,6 +132,8 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
   #ctrl{padding:12px 16px}
   .prod-card,.ht-card{flex-basis:300px;max-width:300px}
 }
+@media(max-width:720px){.decision-lead{align-items:flex-start;flex-direction:column}.life-row{grid-template-columns:1fr}.sliders-col{grid-template-columns:1fr}.condition-input{width:118px!important}}
+@media(prefers-reduced-motion:reduce){.dash-box,.stat-card,.prod-card,.ch-box{animation:none}.margin-fill{transition:none}}
 .composition-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;width:100%;min-width:100%}
 .composition-grid .prod-card{flex:initial;max-width:none;width:100%;padding:20px 22px}
 .comp-summary{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;line-height:1.6;color:var(--text-dim);font-size:.84rem}
@@ -151,7 +168,8 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
   </div>
 </header>
 
-<div id="ctrl">
+<div id="ctrl" class="collapsed">
+  <button type="button" class="btn-ghost ctrl-toggle" id="ctrl-toggle" onclick="toggleSweepControls()" aria-expanded="false">전문가용 분석 범위 설정 ▾</button>
   <div class="ctrl-grp">
     <div class="ctrl-grp-title">온도 Sweep</div>
     <div class="ctrl-row">
@@ -176,13 +194,13 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 
 <div class="wrap">
 
-<div class="sec">분석 요약</div>
+<div class="sec summary-sec">분석 요약</div>
 <div class="stats" id="stat-bar"></div>
 
-<div class="sec">제품 정보</div>
+<div class="sec product-sec">제품 정보</div>
 <div class="prod-grid composition-grid" id="prod-grid"></div>
 
-<div class="sec">열처리 공정</div>
+<div class="sec heat-sec">열처리 공정</div>
 <div class="ht-layout">
   <div class="ch-box">
     <div class="ch-sub">열처리 사이클 (온도-시간 선도)</div>
@@ -196,7 +214,11 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 </div>
 
 <!-- Real-time Dashboard -->
-<div class="sec">실시간 크립 예측 대시보드</div>
+<div class="sec decision-sec">
+  <div class="decision-lead">
+    <div><h2>현재 조건의 예측 결과</h2><p>온도와 응력을 조절하면 예상 수명과 목표 대비 여유가 바로 바뀝니다.</p></div>
+  </div>
+</div>
 <div class="dash-box">
   <div class="dash-tabs" id="dash-tabs"></div>
   <div class="dash-inner">
@@ -204,7 +226,7 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
       <div class="sl-wrap">
         <div class="sl-head">
           <div class="sl-lbl">온도 조절</div>
-          <div class="sl-val" id="sl-t-val">— K</div>
+          <input type="number" class="ctrl-inp condition-input" id="sl-t-input" step="1" aria-label="현재 온도 K">
         </div>
         <div class="sl-track">
           <input type="range" class="vslider" id="sl-temp" min="0" max="1000" value="500">
@@ -214,12 +236,20 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
       <div class="sl-wrap">
         <div class="sl-head">
           <div class="sl-lbl">응력 조절</div>
-          <div class="sl-val" id="sl-s-val">— MPa</div>
+          <input type="number" class="ctrl-inp condition-input" id="sl-s-input" step="1" aria-label="현재 응력 MPa">
         </div>
         <div class="sl-track">
           <input type="range" class="vslider" id="sl-stress" min="0" max="1000" value="500">
         </div>
         <div class="sl-note">현재 비교 중인 제품의 운전 응력을 조절합니다.</div>
+      </div>
+      <div class="sl-wrap target-card">
+        <div class="sl-head">
+          <div class="sl-lbl">목표 운전 시간</div>
+          <input type="number" class="ctrl-inp condition-input" id="target-hours" step="100" min="1" aria-label="목표 운전 시간">
+        </div>
+        <div class="sl-note">다음 점검 또는 교체까지 확보해야 하는 운전 시간입니다.</div>
+        <div class="margin-meter" aria-hidden="true"><div class="margin-fill" id="margin-fill"></div></div>
       </div>
     </div>
     <div class="chart-col">
@@ -233,6 +263,7 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
           <div class="life-hours" id="life-hours">—</div>
           <div class="life-sub" id="life-sub">—</div>
           <div class="life-meta" id="life-meta">—</div>
+          <div class="decision-text" id="decision-text">—</div>
         </div>
         <div class="life-badge safe" id="life-badge">—</div>
       </div>
@@ -264,11 +295,11 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
 
 <!-- Collapsible details -->
 <div class="det-section">
-  <div class="det-header" onclick="toggleDetails()">
+  <div class="det-header" onclick="toggleDetails()" role="button" tabindex="0" aria-controls="det-body" aria-expanded="false">
     <span class="sec">상세 분석 차트</span>
-    <span class="det-arrow open" id="det-arrow">접기 &nbsp;<span class="arr">▼</span></span>
+    <span class="det-arrow" id="det-arrow">펼치기 &nbsp;<span class="arr">▼</span></span>
   </div>
-  <div class="det-body open" id="det-body">
+  <div class="det-body" id="det-body">
     <div style="padding-top:16px">
 
 <div class="sec">온도별 크립 수명 &nbsp;<span id="lbl-fs" style="color:var(--text-dim);font-weight:400;text-transform:none;font-size:.8rem;letter-spacing:0"></span></div>
@@ -426,6 +457,13 @@ function updateLabels(){
 }
 updateLabels();
 
+function toggleSweepControls(){
+  const ctrl=document.getElementById('ctrl'),btn=document.getElementById('ctrl-toggle');
+  const open=ctrl.classList.toggle('collapsed')===false;
+  btn.setAttribute('aria-expanded',String(open));
+  btn.textContent=open?'분석 범위 접기 ▴':'전문가용 분석 범위 설정 ▾';
+}
+
 function formatNumberKo(value, digits=0){
   return new Intl.NumberFormat('ko-KR', {
     minimumFractionDigits: digits,
@@ -571,6 +609,7 @@ function hideLoading(){ vxHideLoading(); }
 
 /* ── Dashboard ── */
 let _dashIdx=0,_curTemp=RD.fixed_temp,_curStress=RD.fixed_stress;
+let _targetHours=Math.max(1,Number(RD.target_hours)||10000);
 
 function bilinearInterp(pidx,temp_k,stress_mpa){
   const hm=RD.products[pidx].heatmap;
@@ -590,21 +629,27 @@ function updateDashboard(){
   const hrs=Math.pow(10,logL);
   const curve=hm.temps_k.map(t=>bilinearInterp(pidx,t,_curStress));
   const cc=vxChartColors();
-  let badge,cls;
-  if(logL>=5){badge='장기 안전';cls='safe';}
-  else if(logL>=4){badge='정상 운전';cls='safe';}
-  else if(logL>=3){badge='주의!';cls='caution';}
-  else if(logL>=2){badge='위험!';cls='danger';}
-  else{badge='긴급 점검';cls='critical';}
+  const margin=hrs/_targetHours;
+  let badge,cls,decision;
+  if(margin>=2){badge='목표 충분히 충족';cls='safe';decision=`목표 시간의 ${margin.toFixed(1)}배로 예측됩니다. 현재 조건을 유지하며 정기 점검하세요.`;}
+  else if(margin>=1){badge='목표 충족';cls='safe';decision=`목표 시간의 ${margin.toFixed(1)}배로 예측됩니다. 운전 조건 변화가 큰 경우 다시 분석하세요.`;}
+  else if(margin>=.7){badge='검토 필요';cls='caution';decision=`목표 시간에 약 ${formatNumberKo(_targetHours-hrs,0)}시간 부족합니다. 조건 완화 또는 전문가 검토가 필요합니다.`;}
+  else if(margin>=.3){badge='전문가 확인 필요';cls='danger';decision='목표 시간보다 예측 수명이 짧습니다. 운전 조건과 소재 데이터를 전문가가 확인해야 합니다.';}
+  else{badge='목표 미달';cls='critical';decision='현재 조건에서 목표 운전 시간을 충족하기 어렵습니다. 조건 변경 후 다시 분석하세요.';}
   const lifeEl=document.getElementById('life-val');
   lifeEl.textContent=formatHoursCompact(hrs);
   lifeEl.style.color=cls==='safe'?cc.ok:cls==='caution'?cc.warn:cls==='danger'?cc.danger:cc.bad;
   document.getElementById('life-hours').textContent=`절대 시간 기준 ${formatNumberKo(hrs, hrs >= 100 ? 0 : 1)}시간`;
-  document.getElementById('life-sub').textContent=`수명 환산 ${formatYearsCompact(hrs)}`;
+  document.getElementById('life-sub').textContent=`목표 대비 ${margin.toFixed(2)}배 · ${formatYearsCompact(hrs)}`;
   document.getElementById('life-meta').textContent=`log10 수명 ${logL.toFixed(3)} · 온도 ${Math.round(_curTemp)} K · 응력 ${_curStress.toFixed(0)} MPa`;
+  document.getElementById('decision-text').textContent=decision;
   const badgeEl=document.getElementById('life-badge');badgeEl.textContent=badge;badgeEl.className='life-badge '+cls;
-  document.getElementById('sl-t-val').textContent=Math.round(_curTemp)+' K';
-  document.getElementById('sl-s-val').textContent=_curStress.toFixed(0)+' MPa';
+  document.getElementById('sl-t-input').value=Math.round(_curTemp);
+  document.getElementById('sl-s-input').value=_curStress.toFixed(0);
+  document.getElementById('target-hours').value=Math.round(_targetHours);
+  const marginFill=document.getElementById('margin-fill');
+  marginFill.style.width=Math.min(100,margin*50)+'%';
+  marginFill.style.background=cls==='safe'?'var(--ok)':cls==='caution'?'var(--warn)':cls==='danger'?'var(--danger)':'var(--bad)';
   if(!window.Plotly){
     setChartFallback('ch-dash','차트 라이브러리를 불러오는 중입니다.<br>수명 수치 계산은 완료되었습니다.');
     return;
@@ -638,10 +683,16 @@ function initDashboard(){
   _curTemp=Math.max(tMin,Math.min(tMax,RD.fixed_temp));
   _curStress=Math.max(sMin,Math.min(sMax,RD.fixed_stress));
   const slT=document.getElementById('sl-temp'),slS=document.getElementById('sl-stress');
+  const inT=document.getElementById('sl-t-input'),inS=document.getElementById('sl-s-input'),inTarget=document.getElementById('target-hours');
   slT.min=0;slT.max=1000;slT.value=Math.round((_curTemp-tMin)/(tMax-tMin)*1000);
   slS.min=0;slS.max=1000;slS.value=Math.round((Math.log10(_curStress)-sLogMin)/(sLogMax-sLogMin)*1000);
   slT.oninput=()=>{_curTemp=tMin+(slT.value/1000)*(tMax-tMin);updateDashboard();};
   slS.oninput=()=>{_curStress=Math.pow(10,sLogMin+(slS.value/1000)*(sLogMax-sLogMin));updateDashboard();};
+  inT.min=Math.ceil(tMin);inT.max=Math.floor(tMax);
+  inS.min=Math.ceil(sMin);inS.max=Math.floor(sMax);
+  inT.onchange=()=>{_curTemp=Math.max(tMin,Math.min(tMax,Number(inT.value)||_curTemp));slT.value=Math.round((_curTemp-tMin)/(tMax-tMin)*1000);updateDashboard();};
+  inS.onchange=()=>{_curStress=Math.max(sMin,Math.min(sMax,Number(inS.value)||_curStress));slS.value=Math.round((Math.log10(_curStress)-sLogMin)/(sLogMax-sLogMin)*1000);updateDashboard();};
+  inTarget.onchange=()=>{_targetHours=Math.max(1,Number(inTarget.value)||_targetHours);RD.target_hours=_targetHours;updateDashboard();};
   updateDashboard();
 }
 
@@ -664,7 +715,7 @@ function renderGASection(){
   const oodTxt=b.ood_is_out_of_distribution===true?'<span class="c-bad">범위 이탈</span>':b.ood_is_out_of_distribution===false?'<span class="c-ok">범위 내</span>':'—';
   const calTxt=b.thermo_success?'<span class="c-ok">완료</span>':'<span style="color:var(--text-dim)">미수행</span>';
   document.getElementById('ga-stats').innerHTML=
-    '<div class="ga-stat"><span class="lbl">재료 비용</span><span class="val '+costCls+'">$'+fmt(b.material_cost,2)+'/kg</span></div>'+
+    '<div class="ga-stat"><span class="lbl">재료 비용 지수</span><span class="val '+costCls+'">'+fmt(b.material_cost,2)+'</span></div>'+
     '<div class="ga-stat"><span class="lbl">물리 위험도</span><span class="val '+riskCls+'">'+fmt(b.physics_risk,2)+'</span></div>'+
     '<div class="ga-stat"><span class="lbl">OOD 상태</span><span class="val">'+oodTxt+'</span></div>'+
     '<div class="ga-stat"><span class="lbl">CALPHAD</span><span class="val">'+calTxt+'</span></div>'+
@@ -698,7 +749,7 @@ function renderGASection(){
   if(meta.generated_at) mParts.push('<span>생성: <strong>'+meta.generated_at+'</strong></span>');
   if(cond.temp_c!=null) mParts.push('<span>GA 조건 — 온도: <strong>'+cond.temp_c+' °C</strong></span>');
   if(cond.stress_mpa!=null) mParts.push('<span>응력: <strong>'+cond.stress_mpa+' MPa</strong></span>');
-  if(cond.cost_limit!=null) mParts.push('<span>비용 한도: <strong>$'+cond.cost_limit+'/kg</strong></span>');
+  if(cond.cost_limit!=null) mParts.push('<span>비용 지수 한도: <strong>'+cond.cost_limit+'</strong></span>');
   document.getElementById('ga-meta-bar').innerHTML=mParts.join('');
   // Comparison chart
   if(!window.Plotly||!ga.sweep) return;
@@ -756,14 +807,16 @@ function loadPlotlyAndRender(){
 }
 
 /* ── Collapsible ── */
-let _detOpen=true,_detRendered=false;
+let _detOpen=false,_detRendered=false;
 function toggleDetails(){
   _detOpen=!_detOpen;
   document.getElementById('det-body').classList.toggle('open',_detOpen);
   const arr=document.getElementById('det-arrow');arr.classList.toggle('open',_detOpen);
   arr.innerHTML=(_detOpen?'접기':'펼치기')+' &nbsp;<span class="arr">▼</span>';
+  document.querySelector('.det-header').setAttribute('aria-expanded',String(_detOpen));
   if(_detOpen&&!_detRendered){_detRendered=true;setTimeout(()=>{renderTempChart();renderStressChart();renderLMPChart();renderHeatmap(0);},100);}
 }
+document.querySelector('.det-header').addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleDetails();}});
 
 /* ── Recalculate ── */
 async function applyParams(){

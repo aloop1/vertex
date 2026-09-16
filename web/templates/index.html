@@ -9,7 +9,9 @@
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
 <style>
 .page-body{display:flex;flex-direction:column;align-items:center;padding:36px 24px}
-.shell{max-width:760px;width:100%}
+.shell{max-width:860px;width:100%}
+.card-main{position:relative;overflow:hidden}
+.card-main:before{content:"";position:absolute;width:340px;height:340px;border-radius:50%;right:-190px;top:-210px;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 20%,transparent),transparent 70%);pointer-events:none}
 .hero{margin-bottom:26px}
 .hero h1{font-size:2rem;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
 .hero h1 .grad{background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -30,6 +32,18 @@
 .lbl{font-size:.78rem;color:var(--text-dim)}
 .hint{font-size:.72rem;color:var(--text-faint);margin-top:3px}
 .submit{margin-top:28px;width:100%}
+.mode-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:6px;margin-bottom:24px}
+.mode-btn{border:0;border-radius:8px;padding:11px 14px;background:transparent;color:var(--text-dim);font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;transition:.2s}
+.mode-btn.active{background:var(--surface-3);color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.16)}
+.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.advanced{display:none;animation:riseIn .3s ease both}
+.advanced.open{display:block}
+.auto-note{display:none;margin:10px 0 0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 9%,var(--surface));color:var(--text-dim);font-size:.76rem;line-height:1.5}
+.auto-note.show{display:block}
+.field input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+@keyframes riseIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(max-width:640px){.quick-grid{grid-template-columns:1fr}.card-main{padding:26px 20px!important}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
@@ -43,15 +57,20 @@
 </header>
 <div class="page-body">
 <div class="shell">
-  <div class="card" style="padding:38px 44px">
+  <div class="card card-main" style="padding:38px 44px">
     <div class="hero">
-      <p class="sub">제품 조성·열처리 데이터를 업로드하면 <strong>온도 및 응력 범위별 크립 수명</strong>을 예측합니다.<br>
-      수명(lifetime) 컬럼 없이 구성 데이터만으로 분석 가능합니다.</p>
+      <h1>운전 조건으로 <span class="grad">크립 수명</span>을 확인하세요</h1>
+      <p class="sub">소재 파일과 현재 운전 조건을 입력하면 <strong>예상 수명과 목표 대비 여유</strong>를 보여드립니다.<br>
+      세부 범위를 직접 분석하려면 전문가 모드를 선택하세요.</p>
     </div>
 
     {% if error %}<div class="err-box">⚠ {{ error }}</div>{% endif %}
 
     <form method="POST" action="/predict" enctype="multipart/form-data" id="predict-form">
+      <div class="mode-bar" role="tablist" aria-label="분석 모드">
+        <button type="button" class="mode-btn active" id="simple-mode" aria-selected="true">현장 모드 · 간편 분석</button>
+        <button type="button" class="mode-btn" id="expert-mode" aria-selected="false">전문가 모드 · 범위 분석</button>
+      </div>
       <div class="sec" style="margin-top:0">데이터 파일</div>
       <div class="upload-zone" id="uz">
         <label for="fup">
@@ -62,7 +81,27 @@
         <input type="file" id="fup" name="file" accept=".xlsx,.csv" required>
       </div>
       <div class="fname" id="fname"></div>
+      <div class="auto-note" id="auto-note">파일에서 운전 조건을 읽어 추천값을 적용했습니다. 필요하면 아래 값을 직접 수정할 수 있습니다.</div>
 
+      <div class="sec">현재 운전 조건</div>
+      <div class="quick-grid">
+        <label class="field">
+          <span class="lbl">현재 온도 (K)</span>
+          <input type="number" name="fixed_temp" value="873" step="any" min="300" max="2000" required>
+          <span class="hint">예: 600°C = 873 K</span>
+        </label>
+        <label class="field">
+          <span class="lbl">현재 응력 (MPa)</span>
+          <input type="number" name="fixed_stress" value="150" step="any" min="1" max="1000" required>
+        </label>
+        <label class="field">
+          <span class="lbl">목표 운전 시간 (h)</span>
+          <input type="number" name="target_hours" value="10000" step="100" min="1" required>
+          <span class="hint">다음 점검까지 필요한 시간</span>
+        </label>
+      </div>
+
+      <div class="advanced" id="advanced-fields">
       <div class="sec">온도 Sweep 설정</div>
       <div class="g3">
         <div class="field">
@@ -73,11 +112,7 @@
           <span class="lbl">최대 온도 (K)</span>
           <input type="number" name="temp_max" value="1200" step="any" min="300" max="2000">
         </div>
-        <div class="field">
-          <span class="lbl">고정 응력 (MPa)</span>
-          <input type="number" name="fixed_stress" value="150" step="any" min="1" max="1000">
-          <span class="hint">온도 sweep 시 고정값</span>
-        </div>
+        <div class="field"><span class="lbl">분석 기준</span><span class="hint">위의 현재 응력값을 고정해 계산합니다.</span></div>
       </div>
 
       <div class="sec">응력 Sweep 설정</div>
@@ -90,11 +125,8 @@
           <span class="lbl">최대 응력 (MPa)</span>
           <input type="number" name="stress_max" value="600" step="any" min="1" max="2000">
         </div>
-        <div class="field">
-          <span class="lbl">고정 온도 (K)</span>
-          <input type="number" name="fixed_temp" value="873" step="any" min="300" max="2000">
-          <span class="hint">응력 sweep 시 고정값</span>
-        </div>
+        <div class="field"><span class="lbl">분석 기준</span><span class="hint">위의 현재 온도값을 고정해 계산합니다.</span></div>
+      </div>
       </div>
 
       <button type="submit" class="btn-primary submit" id="submit-btn">▶ &nbsp;수명 예측 실행</button>
@@ -116,6 +148,7 @@ function suggestParams(file){
       }
       set('temp_min',d.temp_min); set('temp_max',d.temp_max); set('fixed_stress',d.fixed_stress);
       set('stress_min',d.stress_min); set('stress_max',d.stress_max); set('fixed_temp',d.fixed_temp);
+      if(Object.keys(d).length) document.getElementById('auto-note').classList.add('show');
     })
     .catch(function(){});
 }
@@ -131,6 +164,18 @@ function suggestParams(file){
   uz.addEventListener('drop',function(e){
     if(e.dataTransfer.files&&e.dataTransfer.files.length){inp.files=e.dataTransfer.files;onFile(inp.files[0]);}
   });
+})();
+
+(function(){
+  var simple=document.getElementById('simple-mode'), expert=document.getElementById('expert-mode');
+  var advanced=document.getElementById('advanced-fields');
+  function setMode(isExpert){
+    advanced.classList.toggle('open',isExpert);
+    simple.classList.toggle('active',!isExpert); expert.classList.toggle('active',isExpert);
+    simple.setAttribute('aria-selected',String(!isExpert)); expert.setAttribute('aria-selected',String(isExpert));
+  }
+  simple.addEventListener('click',function(){setMode(false);});
+  expert.addEventListener('click',function(){setMode(true);});
 })();
 
 (function(){

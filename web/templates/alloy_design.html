@@ -90,7 +90,7 @@ tr.sel .rank-chip,tr:hover .rank-chip{background:var(--accent-strong);color:#fff
 <div class="sec">Pareto Top 후보 목록 <span id="cand-count" style="color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
 <div class="filter-bar">
   <div class="filter-field">
-    <label>최대 비용 ($/kg)</label>
+    <label>최대 재료 비용 지수</label>
     <input type="number" id="f-cost" placeholder="제한 없음" step="1" min="0">
   </div>
   <div class="filter-field">
@@ -141,7 +141,7 @@ var PHASES=[
   if(m.generated_at) parts.push('<span>생성: <strong>'+m.generated_at+'</strong></span>');
   if(cond.temp_c!=null) parts.push('<span>온도: <strong>'+cond.temp_c+' °C</strong></span>');
   if(cond.stress_mpa!=null) parts.push('<span>응력: <strong>'+cond.stress_mpa+' MPa</strong></span>');
-  if(cond.cost_limit!=null) parts.push('<span>비용 한도: <strong>$'+cond.cost_limit+'/kg</strong></span>');
+  if(cond.cost_limit!=null) parts.push('<span>비용 지수 한도: <strong>'+cond.cost_limit+'</strong></span>');
   parts.push('<span>후보 수: <strong>'+CANDS.length+'</strong></span>');
   document.getElementById('meta-bar').innerHTML=parts.join('');
 })();
@@ -172,7 +172,7 @@ var PHASES=[
   '<div class="life-num '+lifeCls+'">'+fmtHrs(logL)+'</div>'+
   '<div class="life-sub">log₁₀(수명) = '+fmt(logL,3)+'</div>'+
   '<div style="margin-top:18px">'+
-  '<div class="stat-row"><span class="lbl">재료 비용</span><span class="val '+costCls+'">$'+fmt(b.material_cost,2)+'/kg</span></div>'+
+  '<div class="stat-row"><span class="lbl">재료 비용 지수</span><span class="val '+costCls+'">'+fmt(b.material_cost,2)+'</span></div>'+
   '<div class="stat-row"><span class="lbl">물리 위험도</span><span class="val '+riskCls+'">'+fmt(b.physics_risk,2)+'</span></div>'+
   '<div class="stat-row"><span class="lbl">OOD 상태</span><span class="val">'+oodTxt+'</span></div>'+
   '<div class="stat-row"><span class="lbl">OOD 거리</span><span class="val">'+fmt(b.ood_distance,3)+(b.ood_distance_threshold?' / 임계 '+fmt(b.ood_distance_threshold,2):'')+'</span></div>'+
@@ -193,7 +193,7 @@ var PHASES=[
 function paretoXDef(){
   if(_paretoX==='risk') return {get:function(c){return c.physics_risk;},title:'물리 위험도 (penalty)',fmt:function(v){return fmt(v,2);}};
   if(_paretoX==='ood')  return {get:function(c){return c.ood_distance;},title:'OOD Mahalanobis 거리',fmt:function(v){return fmt(v,3);}};
-  return {get:function(c){return c.material_cost;},title:'재료 비용 ($/kg, index)',fmt:function(v){return '$'+fmt(v,2);}};
+  return {get:function(c){return c.material_cost;},title:'재료 비용 지수',fmt:function(v){return fmt(v,2);}};
 }
 
 function setParetoX(mode,btn){
@@ -285,7 +285,7 @@ function selectCandidate(i){
   document.getElementById('detail-panel').innerHTML=
     '<div class="detail-head"><span class="detail-rank">후보 #'+(i+1)+'</span><span class="detail-life">'+fmtHrs(cd.predicted_log_life)+'</span></div>'+
     '<div class="kv"><span class="k">log₁₀(수명)</span><span class="v">'+fmt(cd.predicted_log_life,3)+'</span></div>'+
-    '<div class="kv"><span class="k">재료 비용</span><span class="v">$'+fmt(cd.material_cost,2)+'/kg</span></div>'+
+    '<div class="kv"><span class="k">재료 비용 지수</span><span class="v">'+fmt(cd.material_cost,2)+'</span></div>'+
     '<div class="kv"><span class="k">물리 위험도</span><span class="v">'+fmt(cd.physics_risk,2)+'</span></div>'+
     '<div class="kv"><span class="k">OOD</span><span class="v">'+oodTxt+' ('+fmt(cd.ood_distance,2)+')</span></div>'+
     '<div class="kv"><span class="k">KN / CEQ</span><span class="v">'+fmt(cd.KN,2)+' / '+fmt(cd.CEQ,2)+'</span></div>'+
@@ -325,7 +325,7 @@ function renderCompCompare(){
 var TBL_COLS=[
   {key:'_rank',label:'#',sortable:false},
   {key:'predicted_log_life',label:'예측 수명',render:function(c){return fmtHrs(c.predicted_log_life)+' <span style="color:var(--text-faint)">('+fmt(c.predicted_log_life,2)+')</span>';}},
-  {key:'material_cost',label:'비용 $/kg',render:function(c){return fmt(c.material_cost,2);}},
+  {key:'material_cost',label:'비용 지수',render:function(c){return fmt(c.material_cost,2);}},
   {key:'physics_risk',label:'위험도',render:function(c){return fmt(c.physics_risk,2);}},
   {key:'ood_distance',label:'OOD 거리',render:function(c){return fmt(c.ood_distance,2);}},
   {key:'Cr',label:'Cr',render:function(c){return fmt(c.Cr,2);}},

@@ -339,6 +339,7 @@ def predict():
     stress_max   = fv("stress_max",   600)
     fixed_stress = fv("fixed_stress", 150)
     fixed_temp   = fv("fixed_temp",   873)
+    target_hours = max(1.0, fv("target_hours", 10000))
 
     temp_min, temp_max, stress_min, stress_max, fixed_stress, fixed_temp = _sanitize_sweep_params(
         temp_min, temp_max, stress_min, stress_max, fixed_stress, fixed_temp
@@ -464,6 +465,7 @@ def predict():
         "fixed_temp":   fixed_temp,
         "temp_min":     temp_min,   "temp_max":  temp_max,
         "stress_min":   stress_min, "stress_max": stress_max,
+        "target_hours": target_hours,
         "ga":           ga_data,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
