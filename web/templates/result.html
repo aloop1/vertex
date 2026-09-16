@@ -247,13 +247,13 @@ input.vslider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;backgro
     <div class="sliders-col">
       <div class="sl-wrap">
         <div class="sl-head">
-          <div class="sl-lbl">온도 조절</div>
-          <input type="number" class="ctrl-inp condition-input" id="sl-t-input" step="1" aria-label="현재 온도 K">
+          <div class="sl-lbl">온도 조절 (°C)</div>
+          <input type="number" class="ctrl-inp condition-input" id="sl-t-input" step="0.1" aria-label="현재 온도 섭씨">
         </div>
         <div class="sl-track">
           <input type="range" class="vslider" id="sl-temp" min="0" max="1000" value="500">
         </div>
-        <div class="sl-note">현재 비교 중인 제품의 운전 온도를 조절합니다.</div>
+        <div class="sl-note" id="sl-t-note">모델 계산에는 Kelvin으로 자동 변환됩니다.</div>
       </div>
       <div class="sl-wrap">
         <div class="sl-head">
@@ -689,10 +689,11 @@ function updateDashboard(){
   lifeRow.classList.remove('is-updating');void lifeRow.offsetWidth;lifeRow.classList.add('is-updating');
   document.getElementById('life-hours').textContent=`절대 시간 기준 ${formatNumberKo(hrs, hrs >= 100 ? 0 : 1)}시간`;
   document.getElementById('life-sub').textContent=`목표 대비 ${margin.toFixed(2)}배 · ${formatYearsCompact(hrs)}`;
-  document.getElementById('life-meta').textContent=`log10 수명 ${logL.toFixed(3)} · 온도 ${Math.round(_curTemp)} K · 응력 ${_curStress.toFixed(0)} MPa`;
+  document.getElementById('life-meta').textContent=`log10 수명 ${logL.toFixed(3)} · 온도 ${(_curTemp-273.15).toFixed(1)}°C (${Math.round(_curTemp)} K) · 응력 ${_curStress.toFixed(0)} MPa`;
   document.getElementById('decision-text').textContent=decision;
   const badgeEl=document.getElementById('life-badge');badgeEl.textContent=badge;badgeEl.className='life-badge '+cls;
-  document.getElementById('sl-t-input').value=Math.round(_curTemp);
+  document.getElementById('sl-t-input').value=(_curTemp-273.15).toFixed(1);
+  document.getElementById('sl-t-note').textContent=Math.round(_curTemp)+' K로 계산됩니다.';
   document.getElementById('sl-s-input').value=_curStress.toFixed(0);
   document.getElementById('target-hours').value=Math.round(_targetHours);
   const marginFill=document.getElementById('margin-fill');
@@ -707,9 +708,9 @@ function updateDashboard(){
   const cursorClr=vxTheme()==='dark'?'rgba(255,255,255,.35)':'rgba(30,38,56,.4)';
   const markerLine=vxTheme()==='dark'?'#fff':'#1d2638';
   Plotly.react('ch-dash',[
-    {x:hm.temps_k,y:curve,name:RD.products[pidx].name,type:'scatter',mode:'lines',line:{color:clr,width:2.5},hovertemplate:'T=%{x:.0f} K<br>log₁₀(수명)=%{y:.3f}<extra></extra>'},
-    {x:[_curTemp],y:[logL],name:'현재 조건',type:'scatter',mode:'markers',marker:{size:14,color:markerLine,symbol:'circle',line:{color:clr,width:3}},hovertemplate:'T=%{x:.0f} K<br>log₁₀(수명)=%{y:.3f}<extra>현재 조건</extra>'},
-  ],vxBaseLayout({margin:{l:60,r:20,t:16,b:50},xaxis:{title:'온도 (K)'},yaxis:{title:'log₁₀(수명 / 시간)'},shapes:[...refShapesY(),{type:'line',xref:'x',x0:_curTemp,x1:_curTemp,yref:'paper',y0:0,y1:1,line:{color:cursorClr,width:1.5,dash:'dash'}}],annotations:refAnnotY(),hovermode:'closest',legend:{orientation:'h',y:-0.18,yanchor:'top',x:0}}),{responsive:true,displayModeBar:false});
+    {x:hm.temps_k.map(t=>t-273.15),y:curve,name:RD.products[pidx].name,type:'scatter',mode:'lines',line:{color:clr,width:2.5},hovertemplate:'T=%{x:.1f} °C<br>log₁₀(수명)=%{y:.3f}<extra></extra>'},
+    {x:[_curTemp-273.15],y:[logL],name:'현재 조건',type:'scatter',mode:'markers',marker:{size:14,color:markerLine,symbol:'circle',line:{color:clr,width:3}},hovertemplate:'T=%{x:.1f} °C<br>log₁₀(수명)=%{y:.3f}<extra>현재 조건</extra>'},
+  ],vxBaseLayout({margin:{l:60,r:20,t:16,b:50},xaxis:{title:'온도 (°C)'},yaxis:{title:'log₁₀(수명 / 시간)'},shapes:[...refShapesY(),{type:'line',xref:'x',x0:_curTemp-273.15,x1:_curTemp-273.15,yref:'paper',y0:0,y1:1,line:{color:cursorClr,width:1.5,dash:'dash'}}],annotations:refAnnotY(),hovermode:'closest',legend:{orientation:'h',y:-0.18,yanchor:'top',x:0}}),{responsive:true,displayModeBar:false});
 }
 
 function initDashboard(){
@@ -737,9 +738,9 @@ function initDashboard(){
   slS.min=0;slS.max=1000;slS.value=Math.round((Math.log10(_curStress)-sLogMin)/(sLogMax-sLogMin)*1000);
   slT.oninput=()=>{_curTemp=tMin+(slT.value/1000)*(tMax-tMin);updateDashboard();};
   slS.oninput=()=>{_curStress=Math.pow(10,sLogMin+(slS.value/1000)*(sLogMax-sLogMin));updateDashboard();};
-  inT.min=Math.ceil(tMin);inT.max=Math.floor(tMax);
+  inT.min=Math.ceil((tMin-273.15)*10)/10;inT.max=Math.floor((tMax-273.15)*10)/10;
   inS.min=Math.ceil(sMin);inS.max=Math.floor(sMax);
-  inT.onchange=()=>{_curTemp=Math.max(tMin,Math.min(tMax,Number(inT.value)||_curTemp));slT.value=Math.round((_curTemp-tMin)/(tMax-tMin)*1000);updateDashboard();};
+  inT.onchange=()=>{const enteredK=Number(inT.value)+273.15;_curTemp=Math.max(tMin,Math.min(tMax,Number.isFinite(enteredK)?enteredK:_curTemp));slT.value=Math.round((_curTemp-tMin)/(tMax-tMin)*1000);updateDashboard();};
   inS.onchange=()=>{_curStress=Math.max(sMin,Math.min(sMax,Number(inS.value)||_curStress));slS.value=Math.round((Math.log10(_curStress)-sLogMin)/(sLogMax-sLogMin)*1000);updateDashboard();};
   inTarget.onchange=()=>{_targetHours=Math.max(1,Number(inTarget.value)||_targetHours);RD.target_hours=_targetHours;updateDashboard();};
   updateDashboard();

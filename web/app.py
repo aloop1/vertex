@@ -175,13 +175,28 @@ _CONDITION_ALIASES = {
     "stress": ["stress", "stress_mpa", "rupture_stress", "rupture stress / mpa",
                "applied_stress", "응력"],
     "temp": ["temp", "temp_k", "temperature", "temperature_k",
-             "temperature / kelvin", "test_temp", "온도"],
+             "temperature / kelvin", "temp_c", "temperature_c",
+             "temperature / celsius", "test_temp", "온도", "온도(°c)", "온도(℃)"],
 }
 
 
 def _condition_column(columns: list[str], kind: str) -> str | None:
     lower = {c.lower(): c for c in columns}
     return next((lower[alias] for alias in _CONDITION_ALIASES[kind] if alias in lower), None)
+
+
+def _temperature_values_kelvin(series: pd.Series, column_name: str) -> tuple[pd.Series, str, bool]:
+    """열 이름을 우선하고 값 범위를 보조로 사용해 온도 단위를 K로 통일한다."""
+    values = pd.to_numeric(series, errors="coerce").dropna()
+    values = values[values > 0]
+    name = column_name.lower()
+    explicit_c = any(token in name for token in ["temp_c", "temperature_c", "celsius", "°c", "℃"])
+    explicit_k = any(token in name for token in ["temp_k", "temperature_k", "kelvin"])
+    inferred_c = bool(len(values) and not explicit_k and float(values.median()) < 700.0)
+    is_celsius = explicit_c or inferred_c
+    if is_celsius:
+        return values + 273.15, "°C", True
+    return values, "K", False
 
 
 def _inspect_dataframe(df: pd.DataFrame) -> dict:
@@ -593,8 +608,9 @@ def suggest_params():
 
         tc = _condition_column(list(df.columns), "temp")
         if tc:
-            t = pd.to_numeric(df[tc], errors="coerce").dropna()
-            t = t[t > 0]
+            t, source_unit, converted = _temperature_values_kelvin(df[tc], tc)
+            result["temp_source_unit"] = source_unit
+            result["temp_converted_to_kelvin"] = converted
             if len(t) >= 1:
                 result["fixed_temp"] = int(round(float(t.median())))
             if len(t) >= 2:

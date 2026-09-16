@@ -50,6 +50,9 @@
 .mode-btn{border:0;border-radius:8px;padding:11px 14px;background:transparent;color:var(--text-dim);font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;transition:.2s}
 .mode-btn.active{background:var(--surface-3);color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.16)}
 .quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.unit-input{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.unit-input select{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font:inherit;font-size:.8rem;min-width:68px}
+.conversion{font-size:.7rem;color:var(--accent);min-height:16px;margin-top:2px}
 .advanced{display:none;animation:riseIn .3s ease both}
 .advanced.open{display:block}
 .auto-note{display:none;margin:10px 0 0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 9%,var(--surface));color:var(--text-dim);font-size:.76rem;line-height:1.5}
@@ -111,18 +114,27 @@
       <div class="sec">현재 운전 조건</div>
       <div class="quick-grid">
         <label class="field">
-          <span class="lbl">현재 온도 (K)</span>
-          <input type="number" name="fixed_temp" value="873" step="any" min="300" max="2000" required>
-          <span class="hint">예: 600°C = 873 K</span>
+          <span class="lbl">현재 온도</span>
+          <span class="unit-input">
+            <input type="number" id="temp-display" value="600" step="any" min="-273" max="2000" required>
+            <select id="temp-unit" aria-label="온도 단위"><option value="C" selected>°C</option><option value="K">K</option></select>
+          </span>
+          <input type="hidden" name="fixed_temp" id="fixed-temp-k" value="873.15">
+          <span class="conversion" id="temp-conversion">873.15 K로 계산</span>
         </label>
         <label class="field">
           <span class="lbl">현재 응력 (MPa)</span>
           <input type="number" name="fixed_stress" value="150" step="any" min="1" max="1000" required>
         </label>
         <label class="field">
-          <span class="lbl">목표 운전 시간 (h)</span>
-          <input type="number" name="target_hours" value="10000" step="100" min="1" required>
-          <span class="hint">다음 점검까지 필요한 시간</span>
+          <span class="lbl">목표 운전 시간</span>
+          <span class="unit-input">
+            <input type="number" id="target-display" value="10000" step="any" min="0.01" required>
+            <select id="target-unit" aria-label="시간 단위"><option value="hour" selected>시간</option><option value="day">일</option><option value="month">개월</option><option value="year">년</option></select>
+          </span>
+          <input type="hidden" name="target_hours" id="target-hours-value" value="10000">
+          <span class="conversion" id="target-conversion">10,000시간으로 계산</span>
+          <span class="hint">다음 점검까지 필요한 기간</span>
         </label>
       </div>
 
@@ -160,6 +172,37 @@
 </div>
 </div>
 <script>
+var TIME_FACTORS={hour:1,day:24,month:720,year:8760};
+function syncTemperature(){
+  var display=document.getElementById('temp-display'),unit=document.getElementById('temp-unit');
+  var value=Number(display.value),kelvin=unit.value==='C'?value+273.15:value;
+  document.getElementById('fixed-temp-k').value=Number.isFinite(kelvin)?kelvin.toFixed(2):'';
+  document.getElementById('temp-conversion').textContent=Number.isFinite(kelvin)?kelvin.toFixed(2)+' K로 계산':'온도를 입력하세요';
+}
+function setTemperatureKelvin(kelvin,highlight){
+  var unit=document.getElementById('temp-unit'),display=document.getElementById('temp-display');
+  document.getElementById('fixed-temp-k').value=kelvin;
+  display.value=unit.value==='C'?(Number(kelvin)-273.15).toFixed(1):Number(kelvin).toFixed(1);
+  if(highlight)display.classList.add('autofilled');
+  syncTemperature();
+}
+function syncTargetHours(){
+  var display=document.getElementById('target-display'),unit=document.getElementById('target-unit');
+  var hours=Number(display.value)*TIME_FACTORS[unit.value];
+  document.getElementById('target-hours-value').value=Number.isFinite(hours)?hours.toFixed(2):'';
+  document.getElementById('target-conversion').textContent=Number.isFinite(hours)?new Intl.NumberFormat('ko-KR',{maximumFractionDigits:1}).format(hours)+'시간으로 계산':'기간을 입력하세요';
+}
+document.getElementById('temp-display').addEventListener('input',syncTemperature);
+document.getElementById('temp-unit').addEventListener('change',function(){
+  var kelvin=Number(document.getElementById('fixed-temp-k').value);setTemperatureKelvin(kelvin,false);
+});
+document.getElementById('target-display').addEventListener('input',syncTargetHours);
+document.getElementById('target-unit').addEventListener('change',function(){
+  var hours=Number(document.getElementById('target-hours-value').value),unit=this.value;
+  if(Number.isFinite(hours))document.getElementById('target-display').value=(hours/TIME_FACTORS[unit]).toFixed(unit==='hour'?0:2);
+  syncTargetHours();
+});
+
 function suggestParams(file){
   if(!file) return;
   renderInspection(null);
@@ -173,9 +216,11 @@ function suggestParams(file){
         if(el){el.value=val;el.classList.add('autofilled');}
       }
       set('temp_min',d.temp_min); set('temp_max',d.temp_max); set('fixed_stress',d.fixed_stress);
-      set('stress_min',d.stress_min); set('stress_max',d.stress_max); set('fixed_temp',d.fixed_temp);
+      set('stress_min',d.stress_min); set('stress_max',d.stress_max);
+      if(d.fixed_temp!==undefined)setTemperatureKelvin(d.fixed_temp,true);
       var recommended=['temp_min','temp_max','fixed_stress','stress_min','stress_max','fixed_temp'].some(function(k){return d[k]!==undefined;});
       document.getElementById('auto-note').classList.toggle('show',recommended);
+      if(d.temp_source_unit)document.getElementById('auto-note').textContent='파일의 온도('+d.temp_source_unit+')와 응력값으로 현재 운전 조건을 자동 입력했습니다. 모델 계산에는 K 단위를 사용합니다.';
       renderInspection(d.inspection||{ok:false,errors:['검사 결과를 받지 못했습니다.'],warnings:[]});
     })
     .catch(function(){renderInspection({ok:false,errors:['파일 검사 중 서버 연결 오류가 발생했습니다.'],warnings:[]});});
@@ -240,6 +285,7 @@ document.getElementById('format-help').addEventListener('click',function(){
   var form=document.getElementById('predict-form');
   var btn=document.getElementById('submit-btn');
   form.addEventListener('submit',function(e){
+    syncTemperature();syncTargetHours();
     if(!form.checkValidity()) return;
     btn.disabled=true;
     vxShowLoading({
