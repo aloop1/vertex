@@ -26,6 +26,20 @@
 .uz-label{font-size:.95rem;color:var(--text);margin-bottom:4px;font-weight:600}
 .uz-hint{font-size:.75rem;color:var(--text-faint)}
 .fname{font-size:.8rem;color:var(--accent);margin-top:6px;min-height:18px;text-align:center}
+.file-tools{display:flex;justify-content:center;gap:8px;margin:8px 0 0}
+.sample-link{font-size:.76rem;color:var(--text-dim);padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);transition:.18s}
+.sample-link:hover{color:var(--accent);border-color:var(--accent);text-decoration:none}
+.inspection{display:none;margin-top:14px;padding:16px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);animation:riseIn .3s ease both}
+.inspection.show{display:block}.inspection.ok{border-color:color-mix(in srgb,var(--ok) 55%,var(--border))}.inspection.bad{border-color:color-mix(in srgb,var(--bad) 65%,var(--border))}
+.inspect-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.inspect-title{font-size:.86rem;font-weight:800}.inspect-status{font-size:.72rem;font-weight:700;padding:4px 9px;border-radius:99px;background:var(--surface-3)}
+.inspect-status.ok{color:var(--ok)}.inspect-status.bad{color:var(--bad)}
+.inspect-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.inspect-kpi{padding:10px;border-radius:8px;background:var(--surface);border:1px solid var(--border-soft)}
+.inspect-kpi b{display:block;font-size:1.05rem;color:var(--text);margin-bottom:2px}.inspect-kpi span{font-size:.68rem;color:var(--text-faint)}
+.inspect-label{font-size:.69rem;color:var(--text-faint);margin:9px 0 5px}.inspect-chips{display:flex;flex-wrap:wrap;gap:5px}
+.inspect-chip{font-size:.68rem;padding:3px 7px;border-radius:5px;background:var(--pill-bg);color:var(--pill-text)}
+.inspect-msg{font-size:.75rem;line-height:1.55;padding:7px 9px;border-radius:7px;margin-top:6px}.inspect-msg.warn{background:color-mix(in srgb,var(--warn) 9%,transparent);color:var(--warn)}.inspect-msg.error{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--bad)}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 @media(max-width:640px){.g3{grid-template-columns:1fr}}
 .field{display:flex;flex-direction:column;gap:4px}
@@ -42,7 +56,7 @@
 .auto-note.show{display:block}
 .field input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
 @keyframes riseIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@media(max-width:640px){.quick-grid{grid-template-columns:1fr}.card-main{padding:26px 20px!important}}
+@media(max-width:640px){.quick-grid{grid-template-columns:1fr}.card-main{padding:26px 20px!important}.inspect-kpis{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -81,6 +95,15 @@
         <input type="file" id="fup" name="file" accept=".xlsx,.csv" required>
       </div>
       <div class="fname" id="fname"></div>
+      <div class="file-tools">
+        <a class="sample-link" href="{{ url_for('static', filename='sample_input.csv') }}" download>↓ 예제 CSV 다운로드</a>
+        <button type="button" class="sample-link" id="format-help">입력 컬럼 안내</button>
+      </div>
+      <div class="inspection" id="inspection" aria-live="polite">
+        <div class="inspect-head"><div class="inspect-title">파일 검사 결과</div><div class="inspect-status" id="inspect-status">검사 중</div></div>
+        <div class="inspect-kpis" id="inspect-kpis"></div>
+        <div id="inspect-details"></div>
+      </div>
       <div class="auto-note" id="auto-note">파일에서 운전 조건을 읽어 추천값을 적용했습니다. 필요하면 아래 값을 직접 수정할 수 있습니다.</div>
 
       <div class="sec">현재 운전 조건</div>
@@ -137,6 +160,7 @@
 <script>
 function suggestParams(file){
   if(!file) return;
+  renderInspection(null);
   var fd=new FormData(); fd.append('file',file);
   fetch('/suggest_params',{method:'POST',body:fd})
     .then(function(r){return r.json();})
@@ -148,9 +172,34 @@ function suggestParams(file){
       }
       set('temp_min',d.temp_min); set('temp_max',d.temp_max); set('fixed_stress',d.fixed_stress);
       set('stress_min',d.stress_min); set('stress_max',d.stress_max); set('fixed_temp',d.fixed_temp);
-      if(Object.keys(d).length) document.getElementById('auto-note').classList.add('show');
+      var recommended=['temp_min','temp_max','fixed_stress','stress_min','stress_max','fixed_temp'].some(function(k){return d[k]!==undefined;});
+      document.getElementById('auto-note').classList.toggle('show',recommended);
+      renderInspection(d.inspection||{ok:false,errors:['검사 결과를 받지 못했습니다.'],warnings:[]});
     })
-    .catch(function(){});
+    .catch(function(){renderInspection({ok:false,errors:['파일 검사 중 서버 연결 오류가 발생했습니다.'],warnings:[]});});
+}
+
+function renderInspection(info){
+  var box=document.getElementById('inspection'),status=document.getElementById('inspect-status');
+  var kpis=document.getElementById('inspect-kpis'),details=document.getElementById('inspect-details');
+  box.classList.add('show');
+  if(!info){
+    box.className='inspection show';status.className='inspect-status';status.textContent='검사 중…';
+    kpis.innerHTML='';details.innerHTML='';return;
+  }
+  var ok=!!info.ok;box.className='inspection show '+(ok?'ok':'bad');
+  status.className='inspect-status '+(ok?'ok':'bad');status.textContent=ok?'분석 가능':'확인 필요';
+  var comps=info.recognized_composition||[],ht=info.recognized_heat_treatment||[],conds=info.recognized_conditions||[];
+  kpis.innerHTML='<div class="inspect-kpi"><b>'+(info.row_count||0)+'</b><span>제품 행</span></div>'+
+    '<div class="inspect-kpi"><b>'+comps.length+' / 19</b><span>조성 원소 인식</span></div>'+
+    '<div class="inspect-kpi"><b>'+ht.length+' / 6</b><span>열처리 조건 인식</span></div>';
+  var html='';
+  if(comps.length) html+='<div class="inspect-label">인식한 조성 컬럼</div><div class="inspect-chips">'+comps.map(function(v){return '<span class="inspect-chip">'+v+'</span>';}).join('')+'</div>';
+  if(conds.length) html+='<div class="inspect-label">자동 추천에 사용한 조건</div><div class="inspect-chips">'+conds.map(function(v){return '<span class="inspect-chip">'+(v==='temp'?'온도':'응력')+'</span>';}).join('')+'</div>';
+  (info.warnings||[]).forEach(function(v){html+='<div class="inspect-msg warn">△ '+v+'</div>';});
+  (info.errors||[]).forEach(function(v){html+='<div class="inspect-msg error">! '+v+'</div>';});
+  details.innerHTML=html;
+  document.getElementById('submit-btn').disabled=!ok;
 }
 (function(){
   var inp=document.getElementById('fup'), uz=document.getElementById('uz');
@@ -165,6 +214,13 @@ function suggestParams(file){
     if(e.dataTransfer.files&&e.dataTransfer.files.length){inp.files=e.dataTransfer.files;onFile(inp.files[0]);}
   });
 })();
+
+document.getElementById('format-help').addEventListener('click',function(){
+  var box=document.getElementById('inspection'),status=document.getElementById('inspect-status');
+  box.className='inspection show';status.className='inspect-status';status.textContent='입력 안내';
+  document.getElementById('inspect-kpis').innerHTML='';
+  document.getElementById('inspect-details').innerHTML='<div class="inspect-msg">필수: C, Cr, Mo 등 합금 원소 컬럼 1개 이상<br>권장: Ntemp, Ntime, Ttemp, Ttime, Atemp, Atime<br>선택: name, stress(MPa), temp(K) · 조성 단위는 wt%</div>';
+});
 
 (function(){
   var simple=document.getElementById('simple-mode'), expert=document.getElementById('expert-mode');

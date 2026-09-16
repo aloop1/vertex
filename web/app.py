@@ -140,12 +140,66 @@ _LIFETIME_COLS = {"lifetime", "log_lifetime", "rupture_time", "creep_life",
                   "creep_lifetime", "hours", "rupture_hours"}
 
 
+def _inspect_dataframe(df: pd.DataFrame) -> dict:
+    """업로드 데이터를 예측 전에 사용자 친화적인 형태로 검사한다."""
+    columns = [str(c).strip() for c in df.columns]
+    recognized_comp = [c for c in COMPOSITION_COLS if c in columns]
+    recognized_ht = [c for c in _HT_COLS if c in columns]
+    lower = {c.lower(): c for c in columns}
+    condition_aliases = {
+        "stress": ["stress", "rupture_stress", "applied_stress"],
+        "temp": ["temp", "temperature", "test_temp"],
+    }
+    recognized_conditions = [
+        label for label, aliases in condition_aliases.items()
+        if any(alias in lower for alias in aliases)
+    ]
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    if len(df) == 0:
+        errors.append("데이터 행이 없습니다.")
+    if not recognized_comp:
+        errors.append("합금 조성 컬럼을 찾지 못했습니다. C, Cr, Mo 같은 원소 기호를 열 이름으로 사용하세요.")
+    if not recognized_ht:
+        warnings.append("열처리 컬럼이 없습니다. 열처리 조건은 모두 0으로 계산됩니다.")
+    elif len(recognized_ht) < len(_HT_COLS):
+        missing = [c for c in _HT_COLS if c not in recognized_ht]
+        warnings.append(f"누락된 열처리 컬럼({', '.join(missing)})은 0으로 계산됩니다.")
+    if len(recognized_comp) < 5 and recognized_comp:
+        warnings.append("인식한 조성 원소가 적습니다. 파일의 열 이름과 단위가 맞는지 확인하세요.")
+
+    invalid_cells = 0
+    for col in [*recognized_comp, *recognized_ht]:
+        raw = df[col]
+        nonempty = raw.notna() & raw.astype(str).str.strip().ne("")
+        invalid_cells += int((pd.to_numeric(raw, errors="coerce").isna() & nonempty).sum())
+    if invalid_cells:
+        warnings.append(f"숫자로 읽을 수 없는 값 {invalid_cells}개는 0으로 처리됩니다.")
+
+    return {
+        "ok": not errors,
+        "row_count": int(len(df)),
+        "column_count": int(len(columns)),
+        "recognized_composition": recognized_comp,
+        "recognized_heat_treatment": recognized_ht,
+        "recognized_conditions": recognized_conditions,
+        "missing_composition": [c for c in COMPOSITION_COLS if c not in recognized_comp],
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
 def _parse_upload(file_storage) -> list[dict]:
     buf  = io.BytesIO(file_storage.read())
     name = (file_storage.filename or "").lower()
     df   = pd.read_excel(buf) if name.endswith(".xlsx") else pd.read_csv(buf)
     df.columns = [str(c).strip() for c in df.columns]
     df.rename(columns={"Rh": "Re", "rh": "Re"}, inplace=True)
+
+    inspection = _inspect_dataframe(df)
+    if inspection["errors"]:
+        raise ValueError(" ".join(inspection["errors"]))
 
     # Drop any lifetime-like columns (inference only)
     df.drop(columns=[c for c in df.columns if c.lower() in _LIFETIME_COLS],
@@ -474,7 +528,7 @@ def predict():
 
 @app.post("/suggest_params")
 def suggest_params():
-    """파일의 stress/temp 컬럼을 읽어 sweep 파라미터 추천값을 반환."""
+    """파일 구조 검사와 stress/temp 기반 sweep 추천값을 반환."""
     file = request.files.get("file")
     if not file or file.filename == "":
         return jsonify({}), 200
@@ -483,8 +537,9 @@ def suggest_params():
         name = (file.filename or "").lower()
         df = pd.read_excel(buf) if name.endswith(".xlsx") else pd.read_csv(buf)
         df.columns = [str(c).strip() for c in df.columns]
+        df.rename(columns={"Rh": "Re", "rh": "Re"}, inplace=True)
         col_lower = {c.lower(): c for c in df.columns}
-        result = {}
+        result = {"inspection": _inspect_dataframe(df)}
 
         sc = next((col_lower[k] for k in ["stress", "rupture_stress", "applied_stress"] if k in col_lower), None)
         if sc:
@@ -505,8 +560,20 @@ def suggest_params():
                 result["fixed_temp"] = int(round(float(t.median())))
 
         return jsonify(result)
-    except Exception:
-        return jsonify({}), 200
+    except Exception as exc:
+        return jsonify({
+            "inspection": {
+                "ok": False,
+                "row_count": 0,
+                "column_count": 0,
+                "recognized_composition": [],
+                "recognized_heat_treatment": [],
+                "recognized_conditions": [],
+                "missing_composition": list(COMPOSITION_COLS),
+                "errors": [f"파일을 읽을 수 없습니다: {exc}"],
+                "warnings": [],
+            }
+        }), 200
 
 
 @app.post("/resweep")
