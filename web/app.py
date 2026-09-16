@@ -138,6 +138,17 @@ def _sanitize_sweep_params(
 # ── File parsing ───────────────────────────────────────────────────────────
 _LIFETIME_COLS = {"lifetime", "log_lifetime", "rupture_time", "creep_life",
                   "creep_lifetime", "hours", "rupture_hours"}
+_CONDITION_ALIASES = {
+    "stress": ["stress", "stress_mpa", "rupture_stress", "rupture stress / mpa",
+               "applied_stress", "응력"],
+    "temp": ["temp", "temp_k", "temperature", "temperature_k",
+             "temperature / kelvin", "test_temp", "온도"],
+}
+
+
+def _condition_column(columns: list[str], kind: str) -> str | None:
+    lower = {c.lower(): c for c in columns}
+    return next((lower[alias] for alias in _CONDITION_ALIASES[kind] if alias in lower), None)
 
 
 def _inspect_dataframe(df: pd.DataFrame) -> dict:
@@ -145,14 +156,9 @@ def _inspect_dataframe(df: pd.DataFrame) -> dict:
     columns = [str(c).strip() for c in df.columns]
     recognized_comp = [c for c in COMPOSITION_COLS if c in columns]
     recognized_ht = [c for c in _HT_COLS if c in columns]
-    lower = {c.lower(): c for c in columns}
-    condition_aliases = {
-        "stress": ["stress", "rupture_stress", "applied_stress"],
-        "temp": ["temp", "temperature", "test_temp"],
-    }
     recognized_conditions = [
-        label for label, aliases in condition_aliases.items()
-        if any(alias in lower for alias in aliases)
+        kind for kind in _CONDITION_ALIASES
+        if _condition_column(columns, kind) is not None
     ]
 
     errors: list[str] = []
@@ -538,26 +544,27 @@ def suggest_params():
         df = pd.read_excel(buf) if name.endswith(".xlsx") else pd.read_csv(buf)
         df.columns = [str(c).strip() for c in df.columns]
         df.rename(columns={"Rh": "Re", "rh": "Re"}, inplace=True)
-        col_lower = {c.lower(): c for c in df.columns}
         result = {"inspection": _inspect_dataframe(df)}
 
-        sc = next((col_lower[k] for k in ["stress", "rupture_stress", "applied_stress"] if k in col_lower), None)
+        sc = _condition_column(list(df.columns), "stress")
         if sc:
             s = pd.to_numeric(df[sc], errors="coerce").dropna()
             s = s[s > 0]
+            if len(s) >= 1:
+                result["fixed_stress"] = round(float(s.median()), 1)
             if len(s) >= 2:
                 result["stress_min"] = round(float(s.min()), 1)
                 result["stress_max"] = round(float(s.max()), 1)
-                result["fixed_stress"] = round(float(s.median()), 1)
 
-        tc = next((col_lower[k] for k in ["temp", "temperature", "test_temp"] if k in col_lower), None)
+        tc = _condition_column(list(df.columns), "temp")
         if tc:
             t = pd.to_numeric(df[tc], errors="coerce").dropna()
             t = t[t > 0]
+            if len(t) >= 1:
+                result["fixed_temp"] = int(round(float(t.median())))
             if len(t) >= 2:
                 result["temp_min"] = int(round(float(t.min())))
                 result["temp_max"] = int(round(float(t.max())))
-                result["fixed_temp"] = int(round(float(t.median())))
 
         return jsonify(result)
     except Exception as exc:

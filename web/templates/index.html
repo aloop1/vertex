@@ -55,7 +55,9 @@
 .auto-note{display:none;margin:10px 0 0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 9%,var(--surface));color:var(--text-dim);font-size:.76rem;line-height:1.5}
 .auto-note.show{display:block}
 .field input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.field input.autofilled{border-color:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 12%,transparent);animation:autoPulse .55s ease}
 @keyframes riseIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes autoPulse{50%{transform:translateY(-2px)}}
 @media(max-width:640px){.quick-grid{grid-template-columns:1fr}.card-main{padding:26px 20px!important}.inspect-kpis{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
@@ -104,7 +106,7 @@
         <div class="inspect-kpis" id="inspect-kpis"></div>
         <div id="inspect-details"></div>
       </div>
-      <div class="auto-note" id="auto-note">파일에서 운전 조건을 읽어 추천값을 적용했습니다. 필요하면 아래 값을 직접 수정할 수 있습니다.</div>
+      <div class="auto-note" id="auto-note">파일의 온도·응력값으로 현재 운전 조건을 자동 입력했습니다. 초록색 입력값을 확인한 뒤 필요하면 수정하세요.</div>
 
       <div class="sec">현재 운전 조건</div>
       <div class="quick-grid">
@@ -168,7 +170,7 @@ function suggestParams(file){
       function set(name,val){
         if(val===undefined||val===null) return;
         var el=document.querySelector('[name="'+name+'"]');
-        if(el) el.value=val;
+        if(el){el.value=val;el.classList.add('autofilled');}
       }
       set('temp_min',d.temp_min); set('temp_max',d.temp_max); set('fixed_stress',d.fixed_stress);
       set('stress_min',d.stress_min); set('stress_max',d.stress_max); set('fixed_temp',d.fixed_temp);
