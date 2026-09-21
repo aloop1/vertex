@@ -1,7 +1,21 @@
-.env 
+.env
 __pycache__/
 *.py[cod]
-.claude/image.png
+
+# ── AI 코딩 도구 설정/지침 ────────────────────────────────
+# 실행에 필요한 파일이 아니라 개인 작업환경 설정이다.
+# 로컬에는 그대로 두고 저장소에만 올리지 않는다.
+CLAUDE.md
+codex.md
+CODEX.md
+AGENTS.md
+.claude/
+.codex/
+.cursor/
+
+# 실행 로그 (재생성되는 부산물)
+*.log
+
 creep_curve_1920.png
 creep_curve_highres.png
 creep_curve_1920_transparent.png
