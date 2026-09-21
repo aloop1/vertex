@@ -1,0 +1,26 @@
+services:
+  vertex-web:
+    build: .
+    image: vertex-web:latest
+    container_name: vertex-web
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      PORT: "5000"
+      VERTEX_THREADS: "8"
+      # 프로덕션 모델을 만들었다면 아래로 교체한다.
+      # 지정하지 않으면 models/ 안에서 자동 탐색하고, 없으면 smoke 모델로 폴백한다.
+      # VERTEX_MODEL_PATH: "/app/models/transformer_tree_ensemble.pkl"
+
+    # 호스트에서 모델을 재학습하거나 GA를 다시 돌리면 재빌드 없이 바로 반영된다.
+    # 컨테이너는 읽기만 하므로 read-only 로 마운트한다.
+    volumes:
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+      - ./ga:/app/ga:ro
+
+    # 직접 멈추기 전까지는 Docker 재시작/재부팅 후에도 자동으로 올라온다.
+    # `docker compose stop` 으로 멈추면 그 상태를 기억해 다시 켜지 않는다.
+    restart: unless-stopped

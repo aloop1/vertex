@@ -1,0 +1,24 @@
+# 웹 추론 서버(web/serve.py) 전용 런타임 의존성.
+#
+# 전체 requirements.txt 는 학습·GA·CALPHAD까지 포함하지만, 웹은 추론만 하므로
+# pycalphad(컴파일 필요), deap, optuna, xgboost, streamlit 등은 넣지 않는다.
+#
+# 버전을 고정한 이유: data/preprocessor.pkl 과 models/*.pkl 이 아래 버전으로
+# 피클링돼 있어, 버전이 어긋나면 언피클 단계에서 깨지거나 경고가 난다.
+
+flask==3.1.3
+waitress==3.0.2
+
+pandas==2.3.3
+numpy==2.3.5
+scikit-learn==1.8.0
+joblib==1.5.3
+openpyxl==3.1.5
+
+# app.py 가 모듈 최상단에서 import 하며 Agg 백엔드를 지정한다.
+matplotlib==3.10.9
+
+# torch 는 Dockerfile 에서 CPU 전용 인덱스로 설치한다.
+# 기본 인덱스를 쓰면 CUDA 런타임까지 따라와 이미지가 수 GB 커지는데,
+# 추론 모델이 작아 CPU 로 충분하다.
+torch==2.12.1

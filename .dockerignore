@@ -1,0 +1,34 @@
+# 빌드 컨텍스트에서 제외 — 이미지 크기와 불필요한 재빌드를 줄인다.
+
+.git
+.gitignore
+.claude
+
+__pycache__
+**/__pycache__
+*.py[cod]
+
+# 로컬 지식기반: 벡터 DB와 개인 자료 (이미지에 들어갈 이유가 없다)
+knowledge_base
+
+# 회의록·문서·생성 이미지
+documents
+*.docx
+*.pdf
+*.hwp
+*.pptx
+*.png
+*.gif
+
+# 업로드 임시 디렉터리 (컨테이너에서 새로 만든다)
+web/uploads
+
+# 학습 중 생성물
+models/*_output.txt
+models/*_fit_summary.csv
+
+# 로그·환경
+*.log
+.env
+.venv
+venv
