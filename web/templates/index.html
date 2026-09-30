@@ -8,113 +8,135 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
 <style>
-.page-body{display:flex;flex-direction:column;align-items:center;padding:36px 24px}
-.shell{max-width:860px;width:100%}
-.card-main{position:relative;overflow:hidden}
-.card-main:before{content:"";position:absolute;width:340px;height:340px;border-radius:50%;right:-190px;top:-210px;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 20%,transparent),transparent 70%);pointer-events:none}
-.hero{margin-bottom:26px}
-.hero h1{font-size:2rem;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
-.hero h1 .grad{background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero .sub{color:var(--text-dim);font-size:.9rem;line-height:1.7}
-.hero .sub strong{color:var(--text)}
-.err-box{background:color-mix(in srgb,var(--bad) 12%,var(--surface));border:1px solid var(--bad);border-radius:10px;padding:12px 16px;color:var(--bad);font-size:.86rem;margin-bottom:18px}
-.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:34px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:6px}
+.page-body{display:flex;flex-direction:column;align-items:center;padding:32px 24px 0}
+.shell{max-width:780px;width:100%}
+.err-box{background:color-mix(in srgb,var(--bad) 12%,var(--surface));border:1px solid var(--bad);border-radius:var(--radius);padding:12px 16px;color:var(--bad);font-size:.9rem;margin-bottom:var(--gap-group)}
+
+/* 폼 = 번호 매긴 단계 (Jakob: 익숙한 단계형 입력) */
+.flow{padding:0;overflow:visible}
+.step{padding:28px 32px}
+.step + .step{border-top:1px solid var(--border-soft)}
+.step-head{display:flex;align-items:center;gap:10px;margin-bottom:var(--gap-group)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--surface-3);border:1px solid var(--border);color:var(--text);font-size:.8rem;font-weight:800}
+.step.done .step-num{background:color-mix(in srgb,var(--ok) 18%,var(--surface-3));border-color:var(--ok);color:var(--ok)}
+.step-head{flex-wrap:wrap}
+.step-head h2{font-size:1.02rem;font-weight:700;white-space:nowrap}
+.step-head .step-aside{margin-left:auto;font-size:.8rem;color:var(--text-faint)}
+@media(max-width:680px){.step-head .step-aside{flex-basis:100%;margin-left:36px}}
+
+/* 업로드: 파일을 고르면 영역 자체가 '선택된 파일' 표시로 바뀐다 (Proximity) */
+.upload-zone{display:block;border:2px dashed var(--border);border-radius:var(--radius);padding:30px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s,padding .2s}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent)}
-.upload-zone label{display:block;width:100%;cursor:pointer}
 .upload-zone input[type=file]{display:none}
-.uz-icon{font-size:2.3rem;margin-bottom:8px}
-.uz-label{font-size:.95rem;color:var(--text);margin-bottom:4px;font-weight:600}
-.uz-hint{font-size:.75rem;color:var(--text-faint)}
-.fname{font-size:.8rem;color:var(--accent);margin-top:6px;min-height:18px;text-align:center}
-.file-tools{display:flex;justify-content:center;gap:8px;margin:8px 0 0}
-.sample-link{font-size:.76rem;color:var(--text-dim);padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);transition:.18s}
-.sample-link:hover{color:var(--accent);border-color:var(--accent);text-decoration:none}
-.inspection{display:none;margin-top:14px;padding:16px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);animation:riseIn .3s ease both}
-.inspection.show{display:block}.inspection.ok{border-color:color-mix(in srgb,var(--ok) 55%,var(--border))}.inspection.bad{border-color:color-mix(in srgb,var(--bad) 65%,var(--border))}
-.inspect-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
-.inspect-title{font-size:.86rem;font-weight:800}.inspect-status{font-size:.72rem;font-weight:700;padding:4px 9px;border-radius:99px;background:var(--surface-3)}
-.inspect-status.ok{color:var(--ok)}.inspect-status.bad{color:var(--bad)}
-.inspect-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.inspect-kpi{padding:10px;border-radius:8px;background:var(--surface);border:1px solid var(--border-soft)}
-.inspect-kpi b{display:block;font-size:1.05rem;color:var(--text);margin-bottom:2px}.inspect-kpi span{font-size:.68rem;color:var(--text-faint)}
-.inspect-label{font-size:.69rem;color:var(--text-faint);margin:9px 0 5px}.inspect-chips{display:flex;flex-wrap:wrap;gap:5px}
-.inspect-chip{font-size:.68rem;padding:3px 7px;border-radius:5px;background:var(--pill-bg);color:var(--pill-text)}
-.inspect-msg{font-size:.75rem;line-height:1.55;padding:7px 9px;border-radius:7px;margin-top:6px}.inspect-msg.warn{background:color-mix(in srgb,var(--warn) 9%,transparent);color:var(--warn)}.inspect-msg.error{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--bad)}
-.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-@media(max-width:640px){.g3{grid-template-columns:1fr}}
-.field{display:flex;flex-direction:column;gap:4px}
-.lbl{font-size:.78rem;color:var(--text-dim)}
-.hint{font-size:.72rem;color:var(--text-faint);margin-top:3px}
-.submit{margin-top:28px;width:100%}
-.mode-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:6px;margin-bottom:24px}
-.mode-btn{border:0;border-radius:8px;padding:11px 14px;background:transparent;color:var(--text-dim);font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;transition:.2s}
-.mode-btn.active{background:var(--surface-3);color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.16)}
-.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.uz-icon{display:block;font-size:2rem;margin-bottom:6px}
+.uz-label{display:block;font-size:.98rem;color:var(--text);font-weight:600;margin-bottom:4px}
+.uz-hint{display:block;font-size:.82rem;color:var(--text-dim)}
+.upload-zone.has-file{border-style:solid;padding:14px 18px;text-align:left;display:flex;align-items:center;gap:12px}
+.upload-zone.has-file .uz-icon{font-size:1.4rem;margin:0}
+.upload-zone.has-file .uz-label{margin:0}
+.upload-zone.has-file .uz-hint{display:none}
+.uz-change{margin-left:auto;font-size:.82rem;color:var(--accent);font-weight:600;display:none}
+.upload-zone.has-file .uz-change{display:inline}
+.step-help{font-size:.82rem;color:var(--text-dim);margin-top:10px;line-height:1.6}
+.step-help a,.step-help .link-btn{color:var(--accent);font-size:.82rem}
+
+/* 파일 검사: 한 줄 요약만 기본 노출. 경고·오류는 항상 보인다 (Von Restorff) */
+.inspection{display:none;margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2)}
+.inspection.show{display:block}
+.inspection.ok{border-color:color-mix(in srgb,var(--ok) 45%,var(--border))}
+.inspection.bad{border-color:color-mix(in srgb,var(--bad) 55%,var(--border))}
+.inspect-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.inspect-summary{font-size:.88rem;color:var(--text-dim)}
+.inspect-summary b{color:var(--text);font-weight:700}
+.inspect-msg{font-size:.85rem;line-height:1.55;padding:8px 10px;border-radius:8px;margin-top:8px}
+.inspect-msg.info{background:var(--surface);color:var(--text-dim)}
+.inspect-msg.warn{background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--warn)}
+.inspect-msg.error{background:color-mix(in srgb,var(--bad) 11%,transparent);color:var(--bad)}
+.inspection details{margin-top:6px}
+.inspect-label{font-size:.78rem;color:var(--text-faint);margin:6px 0 5px}
+.inspect-chips{display:flex;flex-wrap:wrap;gap:5px}
+.inspect-chip{font-size:.75rem;padding:3px 8px;border-radius:6px;background:var(--pill-bg);color:var(--pill-text)}
+
+/* 운전 조건 */
+.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap-group)}
+.field{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:.86rem;color:var(--text);font-weight:600}
+.hint{font-size:.78rem;color:var(--text-faint)}
 .unit-input{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
-.unit-input select{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font:inherit;font-size:.8rem;min-width:68px}
-.conversion{font-size:.7rem;color:var(--accent);min-height:16px;margin-top:2px}
-.advanced{display:none;animation:riseIn .3s ease both}
-.advanced.open{display:block}
-.auto-note{display:none;margin:10px 0 0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 9%,var(--surface));color:var(--text-dim);font-size:.76rem;line-height:1.5}
+.field input[type=number]{min-height:var(--tap);font-size:.95rem}
+.unit-input select{min-height:var(--tap);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0 10px;font:inherit;font-size:.88rem;min-width:72px;cursor:pointer}
+/* 바꿀 수 없는 단위는 드롭다운처럼 보이면 안 된다 (Jakob: 모양이 곧 약속) */
+.unit-fixed{display:inline-flex;align-items:center;justify-content:center;min-width:72px;min-height:var(--tap);padding:0 10px;border-radius:8px;color:var(--text-dim);font-size:.88rem;background:transparent;border:1px dashed var(--border-soft)}
+.conversion{font-size:.78rem;color:var(--text-faint);min-height:18px}
+.field input.autofilled{border-color:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 12%,transparent)}
+.auto-note{display:none;margin-top:var(--gap-group);padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--ok) 8%,var(--surface));color:var(--text-dim);font-size:.84rem;line-height:1.5}
 .auto-note.show{display:block}
-.field input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
-.field input.autofilled{border-color:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 12%,transparent);animation:autoPulse .55s ease}
-@keyframes riseIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes autoPulse{50%{transform:translateY(-2px)}}
-@media(max-width:640px){.quick-grid{grid-template-columns:1fr}.card-main{padding:26px 20px!important}.inspect-kpis{grid-template-columns:1fr}}
+
+/* 고급 설정: 기본 접힘 (Hick) */
+.advanced{margin-top:var(--gap-group);border-top:1px dashed var(--border-soft);padding-top:8px}
+.adv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gap-group);margin-top:10px}
+.adv-group{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:10px;padding:14px}
+.adv-group h3{font-size:.86rem;font-weight:700;margin-bottom:4px}
+.adv-group p{font-size:.78rem;color:var(--text-faint);margin-bottom:10px}
+.adv-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* 실행 버튼: 화면 하단에 붙어 항상 보인다 (Fitts: 도달 거리 최소, Von Restorff: 유일한 강조색) */
+.submit-bar{position:sticky;bottom:0;z-index:5;padding:16px 32px 20px;background:linear-gradient(to top,var(--surface) 72%,transparent);border-radius:0 0 14px 14px}
+.submit{width:100%;font-size:1.05rem}
+.submit-hint{text-align:center;font-size:.8rem;color:var(--text-faint);margin-top:8px;min-height:18px}
+
+@media(max-width:680px){.step{padding:22px 18px}.submit-bar{padding:14px 18px 18px}.quick-grid,.adv-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
 {% include '_loading_overlay.html' %}
-<header class="vx-header">
-  <h1><span class="vx-brand-mark">V</span>Vertex — 크립 수명 예측</h1>
-  <div class="hdr-right">
-    <a class="btn-ghost" href="/alloy_design">⚗ 합금 설계</a>
-    <button id="theme-toggle" title="테마 전환">☀</button>
-  </div>
-</header>
-<div class="page-body">
+{% set nav_active = 'predict' %}
+{% include '_header.html' %}
+<main class="page-body">
 <div class="shell">
-  <div class="card card-main" style="padding:38px 44px">
-    <div class="hero">
-      <h1>운전 조건으로 <span class="grad">크립 수명</span>을 확인하세요</h1>
-      <p class="sub">소재 파일과 현재 운전 조건을 입력하면 <strong>예상 수명과 목표 대비 여유</strong>를 보여드립니다.<br>
-      세부 범위를 직접 분석하려면 전문가 모드를 선택하세요.</p>
-    </div>
+  <div class="page-intro">
+    <h1>크립 수명 예측</h1>
+    <p>소재 파일과 운전 조건을 넣으면 예상 수명과 목표 대비 여유를 알려드립니다.</p>
+  </div>
 
-    {% if error %}<div class="err-box">⚠ {{ error }}</div>{% endif %}
+  {% if error %}<div class="err-box" role="alert">⚠ {{ error }}</div>{% endif %}
 
-    <form method="POST" action="/predict" enctype="multipart/form-data" id="predict-form">
-      <div class="mode-bar" role="tablist" aria-label="분석 모드">
-        <button type="button" class="mode-btn active" id="simple-mode" aria-selected="true">현장 모드 · 간편 분석</button>
-        <button type="button" class="mode-btn" id="expert-mode" aria-selected="false">전문가 모드 · 범위 분석</button>
-      </div>
-      <div class="sec" style="margin-top:0">데이터 파일</div>
-      <div class="upload-zone" id="uz">
-        <label for="fup">
-          <div class="uz-icon">📂</div>
-          <div class="uz-label">클릭하거나 파일을 끌어다 놓으세요</div>
-          <div class="uz-hint">xlsx 또는 csv · 조성·열처리 컬럼 포함 · 수명 컬럼 불필요</div>
-        </label>
+  <form method="POST" action="/predict" enctype="multipart/form-data" id="predict-form" class="card flow">
+
+    <section class="step" id="step-file">
+      <div class="step-head"><span class="step-num">1</span><h2>소재 파일</h2></div>
+      <label class="upload-zone" id="uz" for="fup">
+        <span class="uz-icon" aria-hidden="true">📂</span>
+        <span>
+          <span class="uz-label" id="uz-label">파일을 끌어다 놓거나 클릭해서 선택</span>
+          <span class="uz-hint">xlsx 또는 csv · 조성(wt%)·열처리 컬럼 포함 · 수명 컬럼은 필요 없음</span>
+        </span>
+        <span class="uz-change">다른 파일</span>
         <input type="file" id="fup" name="file" accept=".xlsx,.csv" required>
-      </div>
-      <div class="fname" id="fname"></div>
-      <div class="file-tools">
-        <a class="sample-link" href="{{ url_for('static', filename='sample_input.csv') }}" download>↓ 예제 CSV 다운로드</a>
-        <button type="button" class="sample-link" id="format-help">입력 컬럼 안내</button>
-      </div>
+      </label>
+      <p class="step-help">
+        처음이신가요? <a href="{{ url_for('static', filename='sample_input.csv') }}" download>예제 파일 받기</a>
+        · <button type="button" class="link-btn" id="format-help">어떤 컬럼이 필요한가요?</button>
+      </p>
       <div class="inspection" id="inspection" aria-live="polite">
-        <div class="inspect-head"><div class="inspect-title">파일 검사 결과</div><div class="inspect-status" id="inspect-status">검사 중</div></div>
-        <div class="inspect-kpis" id="inspect-kpis"></div>
-        <div id="inspect-details"></div>
+        <div class="inspect-line">
+          <span class="status-chip neutral" id="inspect-status">검사 중</span>
+          <span class="inspect-summary" id="inspect-summary"></span>
+        </div>
+        <div id="inspect-messages"></div>
+        <details class="vx-disclosure" id="inspect-more" hidden>
+          <summary>인식한 컬럼 보기</summary>
+          <div id="inspect-details"></div>
+        </details>
       </div>
-      <div class="auto-note" id="auto-note">파일의 온도·응력값으로 현재 운전 조건을 자동 입력했습니다. 초록색 입력값을 확인한 뒤 필요하면 수정하세요.</div>
+    </section>
 
-      <div class="sec">현재 운전 조건</div>
+    <section class="step" id="step-cond">
+      <div class="step-head"><span class="step-num">2</span><h2>운전 조건</h2><span class="step-aside">파일에 값이 있으면 자동으로 채워집니다</span></div>
       <div class="quick-grid">
         <label class="field">
-          <span class="lbl">현재 온도</span>
+          <span class="lbl">온도</span>
           <span class="unit-input">
             <input type="number" id="temp-display" value="600" step="any" min="-273" max="2000" required>
             <select id="temp-unit" aria-label="온도 단위"><option value="C" selected>°C</option><option value="K">K</option></select>
@@ -123,8 +145,12 @@
           <span class="conversion" id="temp-conversion">873.15 K로 계산</span>
         </label>
         <label class="field">
-          <span class="lbl">현재 응력 (MPa)</span>
-          <input type="number" name="fixed_stress" value="150" step="any" min="1" max="1000" required>
+          <span class="lbl">응력</span>
+          <span class="unit-input">
+            <input type="number" name="fixed_stress" value="150" step="any" min="1" max="1000" required>
+            <span class="unit-fixed">MPa</span>
+          </span>
+          <span class="conversion"></span>
         </label>
         <label class="field">
           <span class="lbl">목표 운전 시간</span>
@@ -133,46 +159,45 @@
             <select id="target-unit" aria-label="시간 단위"><option value="hour" selected>시간</option><option value="day">일</option><option value="month">개월</option><option value="year">년</option></select>
           </span>
           <input type="hidden" name="target_hours" id="target-hours-value" value="10000">
-          <span class="conversion" id="target-conversion">10,000시간으로 계산</span>
-          <span class="hint">다음 점검까지 필요한 기간</span>
+          <span class="conversion" id="target-conversion">다음 점검까지 · 10,000시간</span>
         </label>
       </div>
+      <div class="auto-note" id="auto-note">파일의 온도·응력으로 조건을 채웠습니다. 초록 테두리 값을 확인하세요.</div>
 
-      <div class="advanced" id="advanced-fields">
-      <div class="sec">온도 Sweep 설정</div>
-      <div class="g3">
-        <div class="field">
-          <span class="lbl">최소 온도 (K)</span>
-          <input type="number" name="temp_min" value="700" step="any" min="300" max="2000">
+      <details class="vx-disclosure advanced" id="advanced">
+        <summary>고급 설정 — 분석 범위 직접 지정</summary>
+        <div class="adv-grid">
+          <div class="adv-group">
+            <h3>온도 범위</h3>
+            <p>위 응력을 고정하고 이 범위의 온도를 계산합니다.</p>
+            <div class="adv-pair">
+              <label class="field"><span class="hint">최소 (K)</span><input type="number" name="temp_min" value="700" step="any" min="300" max="2000"></label>
+              <label class="field"><span class="hint">최대 (K)</span><input type="number" name="temp_max" value="1200" step="any" min="300" max="2000"></label>
+            </div>
+          </div>
+          <div class="adv-group">
+            <h3>응력 범위</h3>
+            <p>위 온도를 고정하고 이 범위의 응력을 계산합니다.</p>
+            <div class="adv-pair">
+              <label class="field"><span class="hint">최소 (MPa)</span><input type="number" name="stress_min" value="10" step="any" min="1" max="1000"></label>
+              <label class="field"><span class="hint">최대 (MPa)</span><input type="number" name="stress_max" value="600" step="any" min="1" max="2000"></label>
+            </div>
+          </div>
         </div>
-        <div class="field">
-          <span class="lbl">최대 온도 (K)</span>
-          <input type="number" name="temp_max" value="1200" step="any" min="300" max="2000">
-        </div>
-        <div class="field"><span class="lbl">분석 기준</span><span class="hint">위의 현재 응력값을 고정해 계산합니다.</span></div>
-      </div>
+      </details>
+    </section>
 
-      <div class="sec">응력 Sweep 설정</div>
-      <div class="g3">
-        <div class="field">
-          <span class="lbl">최소 응력 (MPa)</span>
-          <input type="number" name="stress_min" value="10" step="any" min="1" max="1000">
-        </div>
-        <div class="field">
-          <span class="lbl">최대 응력 (MPa)</span>
-          <input type="number" name="stress_max" value="600" step="any" min="1" max="2000">
-        </div>
-        <div class="field"><span class="lbl">분석 기준</span><span class="hint">위의 현재 온도값을 고정해 계산합니다.</span></div>
-      </div>
-      </div>
-
-      <button type="submit" class="btn-primary submit" id="submit-btn">▶ &nbsp;수명 예측 실행</button>
-    </form>
-  </div>
+    <div class="submit-bar">
+      <button type="submit" class="btn-primary submit" id="submit-btn" disabled>수명 예측 실행</button>
+      <div class="submit-hint" id="submit-hint">먼저 소재 파일을 선택하세요</div>
+    </div>
+  </form>
 </div>
-</div>
+</main>
 <script>
 var TIME_FACTORS={hour:1,day:24,month:720,year:8760};
+var fmtKo=function(v,d){return new Intl.NumberFormat('ko-KR',{maximumFractionDigits:d||0}).format(v);};
+
 function syncTemperature(){
   var display=document.getElementById('temp-display'),unit=document.getElementById('temp-unit');
   var value=Number(display.value),kelvin=unit.value==='C'?value+273.15:value;
@@ -190,11 +215,11 @@ function syncTargetHours(){
   var display=document.getElementById('target-display'),unit=document.getElementById('target-unit');
   var hours=Number(display.value)*TIME_FACTORS[unit.value];
   document.getElementById('target-hours-value').value=Number.isFinite(hours)?hours.toFixed(2):'';
-  document.getElementById('target-conversion').textContent=Number.isFinite(hours)?new Intl.NumberFormat('ko-KR',{maximumFractionDigits:1}).format(hours)+'시간으로 계산':'기간을 입력하세요';
+  document.getElementById('target-conversion').textContent=Number.isFinite(hours)?'다음 점검까지 · '+fmtKo(hours,1)+'시간':'기간을 입력하세요';
 }
 document.getElementById('temp-display').addEventListener('input',syncTemperature);
 document.getElementById('temp-unit').addEventListener('change',function(){
-  var kelvin=Number(document.getElementById('fixed-temp-k').value);setTemperatureKelvin(kelvin,false);
+  setTemperatureKelvin(Number(document.getElementById('fixed-temp-k').value),false);
 });
 document.getElementById('target-display').addEventListener('input',syncTargetHours);
 document.getElementById('target-unit').addEventListener('change',function(){
@@ -202,6 +227,13 @@ document.getElementById('target-unit').addEventListener('change',function(){
   if(Number.isFinite(hours))document.getElementById('target-display').value=(hours/TIME_FACTORS[unit]).toFixed(unit==='hour'?0:2);
   syncTargetHours();
 });
+
+/* 실행 가능 여부를 버튼과 바로 아래 안내에 함께 표시 (Proximity) */
+function setReady(ok,msg){
+  document.getElementById('submit-btn').disabled=!ok;
+  document.getElementById('submit-hint').textContent=msg;
+  document.getElementById('step-file').classList.toggle('done',ok);
+}
 
 function suggestParams(file){
   if(!file) return;
@@ -218,9 +250,10 @@ function suggestParams(file){
       set('temp_min',d.temp_min); set('temp_max',d.temp_max); set('fixed_stress',d.fixed_stress);
       set('stress_min',d.stress_min); set('stress_max',d.stress_max);
       if(d.fixed_temp!==undefined)setTemperatureKelvin(d.fixed_temp,true);
-      var recommended=['temp_min','temp_max','fixed_stress','stress_min','stress_max','fixed_temp'].some(function(k){return d[k]!==undefined;});
-      document.getElementById('auto-note').classList.toggle('show',recommended);
-      if(d.temp_source_unit)document.getElementById('auto-note').textContent='파일의 온도('+d.temp_source_unit+')와 응력값으로 현재 운전 조건을 자동 입력했습니다. 모델 계산에는 K 단위를 사용합니다.';
+      var filled=['fixed_stress','fixed_temp'].some(function(k){return d[k]!==undefined;});
+      var note=document.getElementById('auto-note');
+      note.classList.toggle('show',filled);
+      if(d.temp_source_unit)note.textContent='파일의 온도('+d.temp_source_unit+')·응력으로 조건을 채웠습니다. 초록 테두리 값을 확인하세요.';
       renderInspection(d.inspection||{ok:false,errors:['검사 결과를 받지 못했습니다.'],warnings:[]});
     })
     .catch(function(){renderInspection({ok:false,errors:['파일 검사 중 서버 연결 오류가 발생했습니다.'],warnings:[]});});
@@ -228,30 +261,35 @@ function suggestParams(file){
 
 function renderInspection(info){
   var box=document.getElementById('inspection'),status=document.getElementById('inspect-status');
-  var kpis=document.getElementById('inspect-kpis'),details=document.getElementById('inspect-details');
-  box.classList.add('show');
+  var summary=document.getElementById('inspect-summary'),msgs=document.getElementById('inspect-messages');
+  var more=document.getElementById('inspect-more'),details=document.getElementById('inspect-details');
+  box.className='inspection show';
   if(!info){
-    box.className='inspection show';status.className='inspect-status';status.textContent='검사 중…';
-    kpis.innerHTML='';details.innerHTML='';return;
+    status.className='status-chip neutral';status.textContent='검사 중';
+    summary.textContent='파일을 확인하고 있습니다…';msgs.innerHTML='';more.hidden=true;
+    setReady(false,'파일을 확인하는 중입니다…');return;
   }
-  var ok=!!info.ok;box.className='inspection show '+(ok?'ok':'bad');
-  status.className='inspect-status '+(ok?'ok':'bad');status.textContent=ok?'분석 가능':'확인 필요';
+  var ok=!!info.ok;box.classList.add(ok?'ok':'bad');
+  status.className='status-chip '+(ok?'ok':'bad');status.textContent=ok?'분석 가능':'확인 필요';
   var comps=info.recognized_composition||[],ht=info.recognized_heat_treatment||[],conds=info.recognized_conditions||[];
-  kpis.innerHTML='<div class="inspect-kpi"><b>'+(info.row_count||0)+'</b><span>제품 행</span></div>'+
-    '<div class="inspect-kpi"><b>'+comps.length+' / 19</b><span>조성 원소 인식</span></div>'+
-    '<div class="inspect-kpi"><b>'+ht.length+' / 6</b><span>열처리 조건 인식</span></div>';
+  summary.innerHTML='제품 <b>'+(info.row_count||0)+'</b>개 · 조성 원소 <b>'+comps.length+'</b>/19 · 열처리 <b>'+ht.length+'</b>/6';
+  var m='';
+  (info.errors||[]).forEach(function(v){m+='<div class="inspect-msg error">'+v+'</div>';});
+  (info.warnings||[]).forEach(function(v){m+='<div class="inspect-msg warn">'+v+'</div>';});
+  msgs.innerHTML=m;
   var html='';
-  if(comps.length) html+='<div class="inspect-label">인식한 조성 컬럼</div><div class="inspect-chips">'+comps.map(function(v){return '<span class="inspect-chip">'+v+'</span>';}).join('')+'</div>';
-  if(conds.length) html+='<div class="inspect-label">자동 추천에 사용한 조건</div><div class="inspect-chips">'+conds.map(function(v){return '<span class="inspect-chip">'+(v==='temp'?'온도':'응력')+'</span>';}).join('')+'</div>';
-  (info.warnings||[]).forEach(function(v){html+='<div class="inspect-msg warn">△ '+v+'</div>';});
-  (info.errors||[]).forEach(function(v){html+='<div class="inspect-msg error">! '+v+'</div>';});
-  details.innerHTML=html;
-  document.getElementById('submit-btn').disabled=!ok;
+  if(comps.length) html+='<div class="inspect-label">조성 컬럼</div><div class="inspect-chips">'+comps.map(function(v){return '<span class="inspect-chip">'+v+'</span>';}).join('')+'</div>';
+  if(ht.length) html+='<div class="inspect-label">열처리 컬럼</div><div class="inspect-chips">'+ht.map(function(v){return '<span class="inspect-chip">'+v+'</span>';}).join('')+'</div>';
+  if(conds.length) html+='<div class="inspect-label">자동 입력에 쓴 조건</div><div class="inspect-chips">'+conds.map(function(v){return '<span class="inspect-chip">'+(v==='temp'?'온도':'응력')+'</span>';}).join('')+'</div>';
+  details.innerHTML=html;more.hidden=!html;
+  setReady(ok,ok?'준비 완료 — 버튼을 누르면 분석을 시작합니다':'파일 내용을 확인해 주세요');
 }
+
 (function(){
   var inp=document.getElementById('fup'), uz=document.getElementById('uz');
   function onFile(f){
-    document.getElementById('fname').textContent=f?f.name:'';
+    uz.classList.toggle('has-file',!!f);
+    document.getElementById('uz-label').textContent=f?f.name:'파일을 끌어다 놓거나 클릭해서 선택';
     suggestParams(f);
   }
   inp.addEventListener('change',function(){onFile(this.files[0]);});
@@ -263,28 +301,18 @@ function renderInspection(info){
 })();
 
 document.getElementById('format-help').addEventListener('click',function(){
-  var box=document.getElementById('inspection'),status=document.getElementById('inspect-status');
-  box.className='inspection show';status.className='inspect-status';status.textContent='입력 안내';
-  document.getElementById('inspect-kpis').innerHTML='';
-  document.getElementById('inspect-details').innerHTML='<div class="inspect-msg">필수: C, Cr, Mo 등 합금 원소 컬럼 1개 이상<br>권장: Ntemp, Ntime, Ttemp, Ttime, Atemp, Atime<br>선택: name, stress(MPa), temp(K) · 조성 단위는 wt%</div>';
+  var box=document.getElementById('inspection');
+  box.className='inspection show';
+  var status=document.getElementById('inspect-status');status.className='status-chip neutral';status.textContent='입력 안내';
+  document.getElementById('inspect-summary').textContent='';
+  document.getElementById('inspect-more').hidden=true;
+  document.getElementById('inspect-messages').innerHTML='<div class="inspect-msg info"><b>필수</b> — C, Cr, Mo 등 합금 원소(wt%) 컬럼 1개 이상<br><b>권장</b> — Ntemp, Ntime, Ttemp, Ttime, Atemp, Atime (열처리)<br><b>선택</b> — name(제품명), stress(MPa), temp(K) — 있으면 운전 조건을 자동으로 채웁니다</div>';
 });
-
-(function(){
-  var simple=document.getElementById('simple-mode'), expert=document.getElementById('expert-mode');
-  var advanced=document.getElementById('advanced-fields');
-  function setMode(isExpert){
-    advanced.classList.toggle('open',isExpert);
-    simple.classList.toggle('active',!isExpert); expert.classList.toggle('active',isExpert);
-    simple.setAttribute('aria-selected',String(!isExpert)); expert.setAttribute('aria-selected',String(isExpert));
-  }
-  simple.addEventListener('click',function(){setMode(false);});
-  expert.addEventListener('click',function(){setMode(true);});
-})();
 
 (function(){
   var form=document.getElementById('predict-form');
   var btn=document.getElementById('submit-btn');
-  form.addEventListener('submit',function(e){
+  form.addEventListener('submit',function(){
     syncTemperature();syncTargetHours();
     if(!form.checkValidity()) return;
     btn.disabled=true;
@@ -293,6 +321,12 @@ document.getElementById('format-help').addEventListener('click',function(){
       steps:['파일 업로드 중…','조성·열처리 데이터 파싱 중…','온도/응력 조건별 예측 중…','결과 페이지 렌더링 중…'],
       interval:1400,
     });
+  });
+  /* 결과 페이지에서 뒤로 오면 브라우저가 로딩 화면·비활성 버튼 상태까지 복원한다 → 되돌린다 */
+  window.addEventListener('pageshow',function(e){
+    if(!e.persisted) return;
+    vxHideLoading();
+    if(document.getElementById('fup').files.length) setReady(true,'준비 완료 — 버튼을 누르면 분석을 시작합니다');
   });
 })();
 </script>

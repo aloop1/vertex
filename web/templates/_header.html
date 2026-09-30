@@ -1,0 +1,14 @@
+{# 공용 헤더. 포함하기 전에 nav_active 를 'predict' 또는 'design' 으로 지정한다.
+   Jakob: 로고 = 홈, 좌측 상단 내비게이션 탭, 우측엔 전역 설정(테마)만 둔다. #}
+<header class="vx-header">
+  <div class="vx-header-left">
+    <a class="vx-brand" href="/"><span class="vx-brand-mark">V</span>Vertex</a>
+    <nav class="vx-nav" aria-label="주 메뉴">
+      <a href="/"{% if nav_active == 'predict' %} aria-current="page"{% endif %}>수명 예측</a>
+      <a href="/alloy_design"{% if nav_active == 'design' %} aria-current="page"{% endif %}>합금 설계</a>
+    </nav>
+  </div>
+  <div class="hdr-right">
+    <button id="theme-toggle" type="button" title="테마 전환" aria-label="테마 전환">☀</button>
+  </div>
+</header>
