@@ -16,6 +16,7 @@ vertex/
 │   ├── correlation_heatmap.png # 전처리 결과 변수 간 상관관계 히트맵
 │   └── assistant/
 │       └── rag_data/           # RAG 문헌 및 Chroma 벡터 DB
+│       └── what_if__data/      # API 호출 캐시
 │
 ├── documents/
 │   └── 회의록.md                # 팀 프로젝트 진행 기록
