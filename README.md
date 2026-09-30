@@ -1,6 +1,6 @@
-# AI 기반 크립 수명 예측 및 합금 설계 시스템
+# 크립 수명 예측과 AI 솔루션
 
-> 고온·고압 환경 핵심 소재의 크립(Creep) 파단 수명을 예측하고, 수명을 최대화하는 최적 합금 조성을 AI로 도출하는 웹 애플리케이션
+> 고온·고압 환경 핵심 소재의 크립(Creep) 파단 수명을 예측하고, 합금 설계의 의사결정을 돕는 AI 챗봇
 
 ---
 
@@ -57,6 +57,9 @@ vertex/
   * 문제 해결: 단순 무작위 분할 시 발생하는 데이터 누수(Data Leakage) 문제를 차단하기 위해 합금 조성비 기준 Group ID 생성
   * 검증 방식: GroupShuffleSplit을 활용, 학습 시 보지 못한 완전히 새로운 신규 합금 제품군에 대한 예측 성능을 평가함 (총 154개 제품군 중 20%를 테스트셋으로 격리)
 - **최종 피처 수: 30개**
+```
+
+--- 
 
 ### 2. 커스텀 Transformer + 트리 앙상블 모델 (`models/transformer_and_tree_ensemble.py`)
 - Transformer 인코더 기반 변수 간 상호작용 학습
@@ -92,32 +95,28 @@ vertex/
   - 온도 증가 시 예측 수명이 감소하는 경향 확인
   - 고온 조건에서 응력 증가 시 예측 수명이 감소하는 경향 확인
   - 운전 가혹도 지수가 증가할수록 예측 수명이 감소하는 음의 상관 확인
+```
 
-### 3. GA 최적화 (`ga/`)
+--- 
 
-수명 예측 모델을 기반으로 후보 합금 조성을 탐색하고, 물리 제약·OOD 검증·CALPHAD 검증을 거쳐 최종 신합금 후보를 선정한다.
+### 3. 합금 설계 의사 결정 지원 ('analysis')
 
-| 구분               | 내용                                                                                           |
-| :--------------- | :------------------------------------------------------------------------------------------- |
-| 모델 연동            | `models/transformer_tree_ensemble.pkl`을 사용해 후보 조성의 예측 수명 계산                                  |
-| 탐색 원소            | `C`, `Si`, `Mn`, `Cr`, `Mo`, `W`, `Ni`, `V`, `Nb`, `N`, `B`                                  |
-| 고정 원소            | `P`, `S`, `O`는 불순물로 고정하고, `Al`은 현재 설계 대상이 아니므로 고정값으로 처리                                                                |
-| 제한/제외 원소         | `Co`, `Ta`, `Re`, `Cu`는 데이터 희박성, 비용, 설계 범위 문제로 0 또는 제한값으로 관리                                 |
-| Fe 처리            | 전체 조성의 balance로 계산                                                         |
-| 물리 제약            | `KN`, `Ms temperature`, `Laves risk`, `Z-phase risk`, `CEQ`, `MX balance` 등을 계산하여 비현실적 조성 억제 |
-| OOD 검증           | Mahalanobis distance를 이용해 학습 데이터 분포 밖 후보 여부 확인                                               |
-| OOD 기준 파일        | `data/ood_reference.pkl`                                                                     |
-| OOD 사용 원소        | `C`, `Si`, `Mn`, `Cr`, `Mo`, `W`, `Ni`, `V`, `Nb`, `N`, `B`                                  |
-| CALPHAD 검증       | `pycalphad`와 `data/thermo/fe_thermo.tdb`를 이용해 후보 조성의 phase fraction 확인                       |
-| CALPHAD 확인 phase | `BCC_A2`, `FCC_A1`, `LAVES_PHASE`, `SIGMA`, `M23C6`, `M6C`                                   |
-| LLM seed         | Gemini API 또는 `data/seed_cache.json`을 이용해 초기 후보 조성 seed 생성                                   |
-| Seed 검증          | 조성 범위, 총합금량, 물리 penalty 기준을 통과한 seed만 초기 population에 반영                                      |
-| 최적화 방식           | DEAP 기반 NSGA-II 사용                                                                           |
-| 최적화 기준           | 물리야금학적 타당성 확보 → 예측 수명 최대화 → 재료 비용 최소화                                                        |
-| 조성 보정            | 교차·변이 후 원소 범위, 총합금량, `Fe balance`를 만족하도록 repair 수행                                           |
-| 결과 저장            | `ga/best_alloy.json`, `ga/best_alloy.csv`, `ga/pareto_top10.json`, `ga/pareto_top10.csv` 생성  |
-
-결과 파일에는 최종 조성 wt%, 예측 수명, 재료비 index, 물리 penalty, OOD distance, CALPHAD phase fraction이 포함된다.
+                       사용자 질문
+                            ↓
+                        의도 분류
+                            ↓
+┌────────────┬──────────────┬──────────────┬──────────────┐
+│ Prediction │   What-if    │  Knowledge   │ General Chat │
+└─────┬──────┴──────┬───────┴──────┬───────┴──────┬───────┘
+      ↓             ↓              ↓              ↓
+수명예측 모델       API          BGE-M3        Local LLM
+      ↓         후보 생성      + Chroma
+  예상 수명          ↓              ↓
+               수명예측 모델    관련 문헌 검색
+                    ↓              ↓
+               Before/After     Local LLM
+                    ↓              ↓
+               비교 결과 해석    근거 기반 답변
 ```
 
 ---
