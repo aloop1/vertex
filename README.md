@@ -1,67 +1,79 @@
 # 크립 수명 예측과 AI 솔루션
 
-> 고온·고압 환경 핵심 소재의 크립(Creep) 파단 수명을 예측하고, 합금 설계의 의사결정을 돕는 AI 챗봇
+> 고온·고압 환경 핵심 소재의 크립(Creep) 파단 수명을 예측하고, 의사결정을 돕는 AI 챗봇 시스템
 
 ---
 
 ## 📁 프로젝트 구조
 
-```
+```text
 vertex/
 ├── data/
 │   ├── taka.xlsx               # 원본 데이터 (2066행 × 31열)
 │   ├── creep.csv               # 추가 크립 데이터 (1024행 × 42열)
 │   ├── creep_data.csv          # 추가 크립 데이터 (265행 × 25열)
 │   ├── preprocessor.pkl        # 저장된 StandardScaler + 피처 메타정보
-│   └── correlation_heatmap.png # 전처리 결과 변수 간 상관관계 히트맵
-│   ├── ood_reference.pkl       # Mahalanobis OOD 검증 기준 파일
-│   ├── seed_cache.json         # LLM 초기 조성 seed cache
-│   └── thermo/
-│       └── fe_thermo.tdb       # CALPHAD phase validation용 Fe계 열역학 DB
+│   ├── correlation_heatmap.png # 전처리 결과 변수 간 상관관계 히트맵
+│   └── assistant/
+│       └── rag_data/           # RAG 문헌 및 Chroma 벡터 DB
+│
 ├── documents/
-│   └── 회의록.md               # 팀 프로젝트 진행 기록
+│   └── 회의록.md                # 팀 프로젝트 진행 기록
+│
 ├── models/
-│   ├── transformer_and_tree_ensemble.py # 커스텀 모델 학습/평가
-│   └── LMP_데이터증강.py       # LMP 기반 데이터 증강
-├── ga/                        
-│   ├── __init__.py            
-│   ├── config.py               # GA 탐색 범위, 비용, OOD, CALPHAD 등 전체 설정
-│   ├── physics.py              # 물리야금학적 제약 및 penalty 계산
-│   ├── llm.py                  # LLM seed / cache seed 기반 초기 후보 생성
-│   ├── ood_analysis.py         # OOD 거리 계산 및 기여 원소 분석
-│   ├── engine.py               # GA 최적화 실행 및 결과 저장
-├── tools/
-│   ├── build_ood_reference.py # OOD reference 생성 스크립트
-│   └── build_ood.py           # OOD 관련 보조 생성 스크립트
-├── data_preprocessing.py      # 이전 데이터 전처리 및 피처 엔지니어링
-├── 데이터전처리.py             # 추가된 데이터셋 병합 및 데이터 전처리
+│   ├── transformer_and_tree_ensemble.py # 커스텀 Transformer + Tree 앙상블 모델
+│   └── LMP_데이터증강.py        # LMP 기반 데이터 증강
+│
+├── analysis/
+│   ├── pipeline.py             # 챗봇 의도 분류 및 전체 AI 기능 통합
+│   ├── rag/
+│   │   ├── indexer.py          # 문헌 전처리·문장 임베딩·Chroma 인덱싱
+│   │   └── retriever.py        # BGE-M3 기반 관련 문헌 검색
+│   ├── local_llm/
+│   │   ├── model.py            # Ollama Local LLM 실행
+│   │   └── explainer.py        # 검색 문헌 기반 답변 생성
+│   └── what_if/
+│       └── service.py          # AI API 기반 What-if 변경 후보 생성
+│
 ├── web/
-│   ├── app.py                 # 웹 애플리케이션 실행 파일
-├── requirements.txt           # 프로젝트 라이브러리 의존성 목록
-└── README.md                  # 본 문서
+│   ├── app.py                  # Flask 웹 애플리케이션 및 AI Pipeline 연동
+│   ├── serve.py                # Waitress 프로덕션 서버 실행
+│   │
+│   ├── static/
+│   │   ├── vertex.css          # 공통 UI 스타일
+│   │   └── theme.js            # 다크/라이트 테마 및 UI 스크립트
+│   │
+│   └── templates/
+│       ├── index.html          # 메인 입력 화면
+│       ├── result.html         # 크립 수명 예측 및 AI 분석 결과 화면
+│       └── _loading_overlay.html
+│
+├── data_preprocessing.py       # 이전 데이터 전처리 및 피처 엔지니어링
+├── 데이터전처리.py              # 추가 데이터셋 병합 및 데이터 전처리
+├── requirements.txt            # 프로젝트 라이브러리 의존성 목록
+└── README.md                   # 본 문서
 ```
 
---- 
 
 ### 1. 데이터 전처리 및 피처 엔지니어링 (`데이터전처리.py`)
+
 - 원본 데이터(taka.xlsx) 로드: **2066행 × 31열**
 - 데이터 정제: 결측치 처리(합금 성분 NaN → 0) 및 물리적 무결성 검사 (음수 수명/온도 필터링)
 - 이상치 정책: 응력(Stress) 변수의 통계적 이상치(14%)는 실제 실험 인풋 조건(5~450MPa)으로 확인되어 제거 없이 도메인 지식을 반영하여 유지
 - 물리 기반 피처 엔지니어링:
-  * Severity Index (가혹도 지수) 3종 추가: ```N/T/A_severity```
-  * 소재 도메인 지식(Hollomon-Jaffe 파라미터)을 응용하여 온도-시간 비선형 관계 수치화
-- 피처 최적화
-  * 오스테나이트계 합금 특성상 수명 영향력이 미미한 냉각 방식(Cooling1/2/3) 변수 제거
-  * 무의미한 화학 성분 및 노이즈 컬럼 제거를 통한 모델 경량화
+  - Severity Index (가혹도 지수) 3종 추가: `N/T/A_severity`
+  - 소재 도메인 지식(Hollomon-Jaffe 파라미터)을 응용하여 온도-시간 비선형 관계 수치화
+- 피처 최적화:
+  - 오스테나이트계 합금 특성상 수명 영향력이 미미한 냉각 방식(Cooling1/2/3) 변수 제거
+  - 무의미한 화학 성분 및 노이즈 컬럼 제거를 통한 모델 경량화
 - 제품군 단위 데이터 분할 (Group-based Split):
-  * 문제 해결: 단순 무작위 분할 시 발생하는 데이터 누수(Data Leakage) 문제를 차단하기 위해 합금 조성비 기준 Group ID 생성
-  * 검증 방식: GroupShuffleSplit을 활용, 학습 시 보지 못한 완전히 새로운 신규 합금 제품군에 대한 예측 성능을 평가함 (총 154개 제품군 중 20%를 테스트셋으로 격리)
+  - 문제 해결: 단순 무작위 분할 시 발생하는 데이터 누수(Data Leakage) 문제를 차단하기 위해 합금 조성비 기준 Group ID 생성
+  - 검증 방식: GroupShuffleSplit을 활용, 학습 시 보지 못한 완전히 새로운 신규 합금 제품군에 대한 예측 성능을 평가함 (총 154개 제품군 중 20%를 테스트셋으로 격리)
 - **최종 피처 수: 30개**
-```
 
---- 
 
 ### 2. 커스텀 Transformer + 트리 앙상블 모델 (`models/transformer_and_tree_ensemble.py`)
+
 - Transformer 인코더 기반 변수 간 상호작용 학습
   - 각 수치 피처를 토큰으로 변환
   - 다중 헤드 자기어텐션을 직접 구현하여 조성, 운전 조건, 열처리, 물리 파생 변수 간 관계 학습
@@ -75,7 +87,7 @@ vertex/
   - 총 열처리 가혹도
 - LMP는 수명 타깃을 포함하므로 학습 입력에는 사용하지 않고, 예측 후 물리 검증 지표로만 사용
 
-- **모델 성능:**  
+- **모델 성능:**
 
 | 스케일 | RMSE | R² |
 |--------|------|----|
@@ -95,15 +107,17 @@ vertex/
   - 온도 증가 시 예측 수명이 감소하는 경향 확인
   - 고온 조건에서 응력 증가 시 예측 수명이 감소하는 경향 확인
   - 운전 가혹도 지수가 증가할수록 예측 수명이 감소하는 음의 상관 확인
-```
 
---- 
 
-### 3. 합금 설계 의사 결정 지원 ('analysis')
+### 3. AI 기반 크립 수명 분석 및 의사결정 지원 (`analysis/`)
 
+사용자의 질문을 의미 기반으로 분류한 뒤,  
+질문의 목적에 따라 크립 수명 예측, What-if 분석, 문헌 검색 기반 답변을 수행함
+
+```text
                        사용자 질문
                             ↓
-                        의도 분류
+                      질문 의도 분류
                             ↓
 ┌────────────┬──────────────┬──────────────┬──────────────┐
 │ Prediction │   What-if    │  Knowledge   │ General Chat │
@@ -112,20 +126,28 @@ vertex/
 수명예측 모델       API          BGE-M3        Local LLM
       ↓         후보 생성      + Chroma
   예상 수명          ↓              ↓
-               수명예측 모델    관련 문헌 검색
+               수명예측 모델   관련 문헌 검색
                     ↓              ↓
-               Before/After     Local LLM
+               Before/After    Local LLM
                     ↓              ↓
-               비교 결과 해석    근거 기반 답변
-```
+                결과 해석      근거 기반 답변
 
----
+```
 
 ## 🛠 기술 스택
 
 | 구분 | 기술 |
 |------|------|
 | 언어 | Python 3.13 |
-| ML/Data | Pandas, NumPy, Scikit-learn, Seaborn, Joblib |
-| 최적화 | DEAP (유전 알고리즘) |
-| 프론트엔드 | Streamlit |
+| ML / Data | Pandas, NumPy, Scikit-learn, PyTorch, Joblib |
+| 크립 수명 예측 | Custom Transformer + Custom Regression Tree Ensemble |
+| 질문 의도 분류 | multilingual-e5-small, One-vs-Rest Logistic Regression |
+| What-if 분석 | Gemini API |
+| RAG 임베딩 | BGE-M3 |
+| Vector DB | ChromaDB |
+| Local LLM | Ollama 기반 Local LLM |
+| Backend | Flask, Waitress |
+| Frontend | HTML, CSS, JavaScript |
+| 데이터 시각화 | Plotly |
+| 모델 저장 | `.pth`, `.pkl` |
+| 버전 관리 | Git, GitHub |
