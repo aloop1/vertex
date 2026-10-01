@@ -1,4 +1,3 @@
-streamlit
 pandas
 numpy
 scikit-learn
@@ -8,8 +7,10 @@ seaborn
 torch
 optuna
 matplotlib
-deap
 python-dotenv
 google-generativeai
-pycalphad
- 
+flask
+waitress
+chromadb
+sentence-transformers
+PyMuPDF
