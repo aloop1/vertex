@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vertex — Prediction Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+<style>
+.result-hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin:4px 0 24px}.result-hero h1{font-size:2rem;letter-spacing:-.04em;margin:9px 0 6px}.result-hero p{font-size:.8rem;color:var(--text-dim)}.timestamp{font-size:.68rem;color:var(--text-faint)}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.summary-card{padding:17px;border-top:3px solid var(--accent)}.summary-name{font-size:.7rem;color:var(--text-dim)}.summary-life{font-size:1.45rem;font-weight:900;margin:7px 0 2px}.summary-sub{font-size:.68rem;color:var(--text-faint);line-height:1.5}
+.context-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}.context-label{font-size:.7rem;color:var(--text-faint);margin-right:3px}
+.product-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.product-card{padding:18px}.prod-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.prod-name{font-size:.95rem;font-weight:850}.prod-meta{font-size:.67rem;color:var(--text-faint);margin-top:3px}.comp-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}.ht-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-soft)}
+.dashboard{display:grid;grid-template-columns:minmax(310px,.78fr) minmax(0,1.22fr);gap:14px}.control-card{padding:18px}.control-title{font-size:.74rem;font-weight:850;margin-bottom:15px}.slider-block{padding:13px;border:1px solid var(--border-soft);background:var(--surface-2);border-radius:12px;margin-bottom:10px}.slider-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}.slider-head span{font-size:.7rem;color:var(--text-dim)}.slider-value{font-size:.78rem;color:var(--accent);font-weight:800}.vslider{width:100%;accent-color:var(--accent-strong)}.life-card{margin-top:12px;padding:16px;border-radius:14px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent-strong) 10%,var(--surface)),var(--surface));border:1px solid var(--border)}.life-eyebrow{font-size:.64rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em}.life-big{font-size:2rem;font-weight:900;margin:5px 0}.life-detail{font-size:.7rem;color:var(--text-dim);line-height:1.55}.life-band{display:inline-flex;margin-top:10px;border-radius:999px;padding:5px 9px;font-size:.65rem;font-weight:800;border:1px solid var(--border);color:var(--accent);background:var(--surface-2)}
+.chart-main{padding:15px}.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.thermal-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,.65fr);gap:14px}.ht-list{display:flex;flex-direction:column;gap:10px}.ht-item{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 16px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border-soft)}.ht-name{font-size:.94rem;font-weight:850;letter-spacing:-.01em}.ht-val{font-size:.82rem;color:var(--text-dim);text-align:right;line-height:1.55;font-weight:650}.ht-val strong{color:var(--text);font-size:.9rem}
+.resweep{display:flex;flex-wrap:wrap;align-items:end;gap:9px;padding:15px;margin-bottom:14px}.resweep .field{width:130px}.resweep .field span{font-size:.62rem}.resweep .btn-primary{margin-left:auto;padding:10px 16px;font-size:.74rem}.export-btn{font-size:.7rem}
+.details-toggle{display:flex;justify-content:space-between;align-items:center;cursor:pointer}.details-body{display:block}.details-body.closed{display:none}
+@media(max-width:980px){.dashboard,.thermal-grid,.chart-grid{grid-template-columns:1fr}.resweep .btn-primary{margin-left:0}.result-hero{align-items:flex-start;flex-direction:column}}@media(max-width:620px){.product-grid{grid-template-columns:1fr}.resweep .field{width:calc(50% - 6px)}}
+</style>
+</head>
+<body>
+{% include '_loading_overlay.html' %}
+<header class="vx-header">
+  <a class="vx-brand" href="/"><span class="vx-brand-mark">V</span><span class="vx-brand-copy"><span class="vx-brand-name">Vertex</span><span class="vx-brand-sub">PREDICTION DASHBOARD</span></span></a>
+  <nav class="vx-nav">
+    <button class="btn-ghost export-btn" id="export-all-btn">CSV 내보내기</button>
+    <a class="vx-nav-link" href="/assistant">Vertex AI</a>
+    <a class="vx-nav-link" href="/">새 분석</a>
+    <button id="theme-toggle" title="테마 전환">☀</button>
+  </nav>
+</header>
+
+<main class="vx-container">
+  <div class="result-hero">
+    <div><span class="vx-kicker"><span class="vx-kicker-dot"></span>Prediction complete</span><h1>크립 수명 분석 결과</h1><p>입력 조건 기반 크리프 수명 분석 결과</p></div>
+    <div class="timestamp">생성 {{ payload.generated_at }}</div>
+  </div>
+
+  <section class="summary-grid" id="summary-grid"></section>
+
+  <div class="sec">분석 소재</div>
+  <div class="context-bar" id="product-tabs"><span class="context-label">현재 소재</span></div>
+  <section class="product-grid" id="product-grid"></section>
+
+  <div class="sec">현재 조건 탐색</div>
+  <section class="dashboard">
+    <div class="vx-card control-card">
+      <div class="control-title">운전 조건</div>
+      <div class="slider-block"><div class="slider-head"><span>온도</span><b class="slider-value" id="sl-t-val">— K</b></div><input class="vslider" type="range" id="sl-temp" min="0" max="1000" value="500"></div>
+      <div class="slider-block"><div class="slider-head"><span>응력</span><b class="slider-value" id="sl-s-val">— MPa</b></div><input class="vslider" type="range" id="sl-stress" min="0" max="1000" value="500"></div>
+      <div class="life-card"><div class="life-eyebrow">Predicted creep life</div><div class="life-big" id="life-val">—</div><div class="life-detail" id="life-detail">—</div><span class="life-band" id="life-band">예측 수명 구간</span></div>
+    </div>
+    <div class="vx-card chart-main"><div class="ch-sub" id="dash-title">현재 응력에서의 온도별 예측 수명</div><div id="ch-dash" style="height:390px"></div></div>
+  </section>
+
+  <div class="sec">Sweep 범위 재계산</div>
+  <section class="vx-card resweep">
+    <label class="field"><span>최소 온도 K</span><input class="ctrl-inp" id="c-tmin" type="number" step="any"></label>
+    <label class="field"><span>최대 온도 K</span><input class="ctrl-inp" id="c-tmax" type="number" step="any"></label>
+    <label class="field"><span>고정 응력 MPa</span><input class="ctrl-inp" id="c-fs" type="number" step="any"></label>
+    <label class="field"><span>최소 응력 MPa</span><input class="ctrl-inp" id="c-smin" type="number" step="any"></label>
+    <label class="field"><span>최대 응력 MPa</span><input class="ctrl-inp" id="c-smax" type="number" step="any"></label>
+    <label class="field"><span>고정 온도 K</span><input class="ctrl-inp" id="c-ft" type="number" step="any"></label>
+    <button class="btn-primary" id="apply-btn" onclick="applyParams()">다시 계산</button>
+  </section>
+
+  <div class="sec">열처리 공정</div>
+  <section class="thermal-grid">
+    <div class="ch-box"><div class="ch-sub">온도-시간 열처리 사이클</div><div id="ch-ht" style="height:320px"></div></div>
+    <div class="vx-card" style="padding:19px"><div class="vx-section-title" style="font-size:.96rem;margin-bottom:14px">단계별 조건</div><div class="ht-list" id="ht-list"></div></div>
+  </section>
+
+  <div class="sec"><div class="details-toggle" onclick="toggleDetails()"><span>상세 예측 차트</span><span class="vx-faint" id="details-label">접기 ↑</span></div></div>
+  <div class="details-body" id="details-body">
+    <section class="chart-grid">
+      <div class="ch-box"><div class="ch-sub" id="sub-temp"></div><div id="ch-temp" style="height:390px"></div></div>
+      <div class="ch-box"><div class="ch-sub" id="sub-stress"></div><div id="ch-stress" style="height:390px"></div></div>
+      <div class="ch-box"><div class="ch-sub">Larson–Miller Parameter</div><div id="ch-lmp" style="height:350px"></div><p class="ref">LMP는 온도와 예측 파단 시간을 하나의 파라미터로 표현한 참고 지표입니다.</p></div>
+      <div class="ch-box"><div class="ch-sub" id="hm-title">온도·응력별 예측 수명 맵</div><div id="ch-hm" style="height:350px"></div><p class="ref">색상은 프로젝트 모델이 예측한 log₁₀(life[h])를 나타냅니다.</p></div>
+    </section>
+  </div>
+</main>
+
+<script id="result-data" type="application/json">{{ payload | tojson }}</script>
+<script>
+const RD=JSON.parse(document.getElementById('result-data').textContent);const COLORS=VX_SERIES;let _dashIdx=0,_curTemp=RD.fixed_temp,_curStress=RD.fixed_stress,_detailsOpen=true,PLOTLY_READY=false;
+function fmtNum(v,d){return Number(v).toLocaleString('ko-KR',{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
+function fmtHours(h){h=Number(h);if(!Number.isFinite(h)||h<=0)return'—';if(h>=8760)return'약 '+(h/8760).toLocaleString('ko-KR',{maximumFractionDigits:h>=87600?0:1})+'년';if(h>=1000000)return(h/1000000).toFixed(2)+'M h';if(h>=1000)return(h/1000).toFixed(1)+'k h';return h.toLocaleString('ko-KR',{maximumFractionDigits:1})+' h';}
+function formatWt(v){v=Number(v);if(!Number.isFinite(v))return'—';if(Math.abs(v)>0&&Math.abs(v)<.001)return v.toExponential(2);if(v<.1)return v.toFixed(4);if(v<1)return v.toFixed(3);return v.toFixed(2);}
+function setFallback(id,msg){var el=document.getElementById(id);if(el)el.innerHTML='<div style="height:100%;display:grid;place-items:center;color:var(--text-dim);font-size:.8rem;text-align:center">'+msg+'</div>';}
+function requirePlotly(ids){if(window.Plotly)return true;ids.forEach(function(id){setFallback(id,'차트 라이브러리를 불러오는 중입니다.');});return false;}
+
+(function initTop(){
+  var sums=document.getElementById('summary-grid'),grid=document.getElementById('product-grid'),tabs=document.getElementById('product-tabs');
+  RD.products.forEach(function(p,i){var logs=p.temp_sweep.log10_hours,maxLog=Math.max.apply(null,logs),minLog=Math.min.apply(null,logs),clr=COLORS[i%COLORS.length];sums.insertAdjacentHTML('beforeend','<article class="vx-card summary-card" style="border-top-color:'+clr+'"><div class="summary-name">'+vxEsc(p.name)+'</div><div class="summary-life">'+vxEsc(fmtHours(Math.pow(10,maxLog)))+'</div><div class="summary-sub">설정 온도 범위 내 최대 예측값<br>'+vxEsc(fmtHours(Math.pow(10,minLog)))+' – '+vxEsc(fmtHours(Math.pow(10,maxLog)))+'</div></article>');
+    var comp=Object.entries(p.composition||{}).filter(function(x){return Number(x[1])!==0;}).sort(function(a,b){return Number(b[1])-Number(a[1]);});var compHtml=comp.map(function(x){return'<span class="pill"><b>'+vxEsc(x[0])+'</b> '+formatWt(x[1])+'%</span>';}).join('');var ht=Object.entries(p.heat_treatment||{}).map(function(x){return'<span class="pill">'+vxEsc(x[0])+' '+vxEsc(x[1])+'</span>';}).join('');grid.insertAdjacentHTML('beforeend','<article class="vx-card product-card" style="border-top:3px solid '+clr+'"><div class="prod-head"><div><div class="prod-name" style="color:'+clr+'">'+vxEsc(p.name)+'</div><div class="prod-meta">조성 '+comp.length+'개 원소 · 열처리 '+Object.keys(p.heat_treatment||{}).length+'개 조건</div></div><button class="btn-ghost export-btn" onclick="exportProductCsv('+i+')">CSV</button></div><div class="comp-pills">'+compHtml+'</div><div class="ht-pills">'+(ht||'<span class="vx-faint" style="font-size:.68rem">열처리 정보 없음</span>')+'</div></article>');
+    var b=document.createElement('button');b.className='vx-pill-btn'+(i===0?' active':'');b.textContent=p.name;b.style.borderLeft='3px solid '+clr;b.onclick=function(){setActiveProduct(i);};tabs.appendChild(b);
+  });
+  ['c-tmin','c-tmax','c-fs','c-smin','c-smax','c-ft'].forEach(function(id){var map={'c-tmin':'temp_min','c-tmax':'temp_max','c-fs':'fixed_stress','c-smin':'stress_min','c-smax':'stress_max','c-ft':'fixed_temp'};document.getElementById(id).value=RD[map[id]];});
+})();
+
+function bilinearInterp(pidx,temp,stress){var hm=RD.products[pidx].heatmap,ts=hm.temps_k,ss=hm.stresses_mpa,g=hm.log10_hours_grid,t=Math.max(ts[0],Math.min(ts[ts.length-1],temp)),s=Math.max(ss[0],Math.min(ss[ss.length-1],stress)),ti=ts.length-2,si=ss.length-2;for(var i=0;i<ts.length-1;i++)if(ts[i]<=t&&t<=ts[i+1]){ti=i;break;}for(var j=0;j<ss.length-1;j++)if(ss[j]<=s&&s<=ss[j+1]){si=j;break;}var ft=(t-ts[ti])/(ts[ti+1]-ts[ti]||1),fs=(s-ss[si])/(ss[si+1]-ss[si]||1);return g[si][ti]*(1-ft)*(1-fs)+g[si][ti+1]*ft*(1-fs)+g[si+1][ti]*(1-ft)*fs+g[si+1][ti+1]*ft*fs;}
+function lifeBand(logL){if(logL>=5)return'100,000 h 이상';if(logL>=4)return'10,000–100,000 h';if(logL>=3)return'1,000–10,000 h';if(logL>=2)return'100–1,000 h';return'100 h 미만';}
+function updateDashboard(){var p=RD.products[_dashIdx],hm=p.heatmap,logL=bilinearInterp(_dashIdx,_curTemp,_curStress),hrs=Math.pow(10,logL),curve=hm.temps_k.map(function(t){return bilinearInterp(_dashIdx,t,_curStress);});document.getElementById('sl-t-val').textContent=Math.round(_curTemp)+' K';document.getElementById('sl-s-val').textContent=_curStress.toFixed(0)+' MPa';document.getElementById('life-val').textContent=fmtHours(hrs);document.getElementById('life-detail').innerHTML='약 '+fmtNum(hrs,hrs>100?0:1)+' h · log₁₀(life) '+logL.toFixed(3)+'<br>온도 '+Math.round(_curTemp)+' K · 응력 '+_curStress.toFixed(0)+' MPa';document.getElementById('life-band').textContent=lifeBand(logL);document.getElementById('dash-title').textContent=p.name+' · 응력 '+_curStress.toFixed(0)+' MPa에서의 온도별 예측 수명';if(!requirePlotly(['ch-dash']))return;var clr=COLORS[_dashIdx%COLORS.length];Plotly.react('ch-dash',[{x:hm.temps_k,y:curve,type:'scatter',mode:'lines',name:p.name,line:{color:clr,width:2.8},hovertemplate:'T=%{x:.0f} K<br>log₁₀(life)=%{y:.3f}<extra></extra>'},{x:[_curTemp],y:[logL],type:'scatter',mode:'markers',name:'현재 조건',marker:{size:13,color:vxChartColors().paper,line:{color:clr,width:3}},hovertemplate:'현재 조건<br>T=%{x:.0f} K<br>log₁₀=%{y:.3f}<extra></extra>'}],vxBaseLayout({margin:{l:60,r:18,t:12,b:50},xaxis:{title:'온도 (K)'},yaxis:{title:'log₁₀(life[h])'},hovermode:'closest',legend:{orientation:'h',y:-.18,x:0}}),{responsive:true,displayModeBar:false});}
+function initSliders(){var hm=RD.products[_dashIdx].heatmap,tmin=hm.temps_k[0],tmax=hm.temps_k[hm.temps_k.length-1],smin=hm.stresses_mpa[0],smax=hm.stresses_mpa[hm.stresses_mpa.length-1],slT=document.getElementById('sl-temp'),slS=document.getElementById('sl-stress'),lmin=Math.log10(smin),lmax=Math.log10(smax);_curTemp=Math.max(tmin,Math.min(tmax,_curTemp));_curStress=Math.max(smin,Math.min(smax,_curStress));slT.value=Math.round((_curTemp-tmin)/(tmax-tmin)*1000);slS.value=Math.round((Math.log10(_curStress)-lmin)/(lmax-lmin)*1000);slT.oninput=function(){_curTemp=tmin+(this.value/1000)*(tmax-tmin);updateDashboard();};slS.oninput=function(){_curStress=Math.pow(10,lmin+(this.value/1000)*(lmax-lmin));updateDashboard();};updateDashboard();}
+function setActiveProduct(i){_dashIdx=i;document.querySelectorAll('#product-tabs .vx-pill-btn').forEach(function(b,j){b.classList.toggle('active',j===i);});initSliders();renderHeatmap();renderHTList();}
+
+function renderTemp(){if(!requirePlotly(['ch-temp']))return;Plotly.react('ch-temp',RD.products.map(function(p,i){return{x:p.temp_sweep.temps_k,y:p.temp_sweep.log10_hours,customdata:p.temp_sweep.hours,name:p.name,type:'scatter',mode:'lines',line:{color:COLORS[i%COLORS.length],width:2.3},hovertemplate:'T=%{x:.0f} K<br>log₁₀=%{y:.3f}<br>%{customdata:,.0f} h<extra>'+vxEsc(p.name)+'</extra>'};}),vxBaseLayout({xaxis:{title:'온도 (K)'},yaxis:{title:'log₁₀(life[h])'}}),{responsive:true,displayModeBar:false});document.getElementById('sub-temp').textContent='응력 '+RD.fixed_stress+' MPa 고정 · 온도 '+RD.temp_min+'–'+RD.temp_max+' K';}
+function renderStress(){if(!requirePlotly(['ch-stress']))return;Plotly.react('ch-stress',RD.products.map(function(p,i){return{x:p.stress_sweep.stresses_mpa,y:p.stress_sweep.log10_hours,customdata:p.stress_sweep.hours,name:p.name,type:'scatter',mode:'lines',line:{color:COLORS[i%COLORS.length],width:2.3},hovertemplate:'응력=%{x:.1f} MPa<br>log₁₀=%{y:.3f}<br>%{customdata:,.0f} h<extra>'+vxEsc(p.name)+'</extra>'};}),vxBaseLayout({xaxis:{title:'응력 (MPa)',type:'log'},yaxis:{title:'log₁₀(life[h])'}}),{responsive:true,displayModeBar:false});document.getElementById('sub-stress').textContent='온도 '+RD.fixed_temp+' K 고정 · 응력 '+RD.stress_min+'–'+RD.stress_max+' MPa';}
+function renderLMP(){if(!requirePlotly(['ch-lmp']))return;Plotly.react('ch-lmp',RD.products.map(function(p,i){return{x:p.lmp.lmp_vals,y:p.lmp.stresses_mpa,name:p.name,type:'scatter',mode:'lines',line:{color:COLORS[i%COLORS.length],width:2.3},hovertemplate:'LMP=%{x:.3f}<br>응력=%{y:.1f} MPa<extra>'+vxEsc(p.name)+'</extra>'};}),vxBaseLayout({xaxis:{title:'LMP (×10³)'},yaxis:{title:'응력 (MPa)',type:'log'},hovermode:'closest'}),{responsive:true,displayModeBar:false});}
+function renderHeatmap(){if(!requirePlotly(['ch-hm']))return;var p=RD.products[_dashIdx],hm=p.heatmap;document.getElementById('hm-title').textContent=p.name+' · 온도·응력별 예측 수명 맵';Plotly.react('ch-hm',[{x:hm.temps_k,y:hm.stresses_mpa,z:hm.log10_hours_grid,type:'heatmap',colorscale:vxHeatmapScale(),colorbar:{title:'log₁₀(h)',thickness:12},hovertemplate:'T=%{x:.0f} K<br>응력=%{y:.0f} MPa<br>log₁₀(life)=%{z:.2f}<extra></extra>'}],vxBaseLayout({margin:{l:60,r:72,t:10,b:50},xaxis:{title:'온도 (K)'},yaxis:{title:'응력 (MPa)',type:'log'},hovermode:'closest'}),{responsive:true,displayModeBar:false});}
+function renderThermal(){if(!requirePlotly(['ch-ht']))return;var R=.35,G=.25,RT=25,tr=RD.products.map(function(p,ci){if(!p.ht_stages||!p.ht_stages.length)return null;var x=[0],y=[RT],t=0;p.ht_stages.forEach(function(s,si){t+=R;x.push(t);y.push(s.temp_c);t+=s.time_h;x.push(t);y.push(s.temp_c);t+=R;x.push(t);y.push(RT);if(si<p.ht_stages.length-1){t+=G;x.push(t);y.push(RT);}});return{x:x,y:y,name:p.name,type:'scatter',mode:'lines+markers',line:{color:COLORS[ci%COLORS.length],width:2.2},marker:{size:4},hovertemplate:'%{y:.0f} °C<extra>'+vxEsc(p.name)+'</extra>'};}).filter(Boolean);Plotly.react('ch-ht',tr,vxBaseLayout({xaxis:{title:'시간 (h)'},yaxis:{title:'온도 (°C)',rangemode:'tozero'}}),{responsive:true,displayModeBar:false});}
+function renderHTList(){var p=RD.products[_dashIdx],el=document.getElementById('ht-list'),html='';(p.ht_stages||[]).forEach(function(s){html+='<div class="ht-item"><div class="ht-name">'+vxEsc(s.label)+'</div><div class="ht-val"><strong>'+s.temp_c+' °C</strong> · <strong>'+s.time_h+' h</strong><br>'+s.temp_k+' K</div></div>';});el.innerHTML=html||'<div class="vx-faint" style="font-size:.72rem">입력된 열처리 단계가 없습니다.</div>';}
+function renderAll(){renderThermal();renderHTList();updateDashboard();if(_detailsOpen){renderTemp();renderStress();renderLMP();renderHeatmap();}}
+function loadPlotly(){if(window.Plotly){PLOTLY_READY=true;renderAll();return;}var s=document.createElement('script');s.src='https://cdn.plot.ly/plotly-2.35.2.min.js';s.onload=function(){PLOTLY_READY=true;renderAll();};s.onerror=function(){['ch-ht','ch-dash','ch-temp','ch-stress','ch-lmp','ch-hm'].forEach(function(id){setFallback(id,'Plotly를 불러오지 못했습니다.');});};document.body.appendChild(s);}
+function toggleDetails(){_detailsOpen=!_detailsOpen;document.getElementById('details-body').classList.toggle('closed',!_detailsOpen);document.getElementById('details-label').textContent=_detailsOpen?'접기 ↑':'펼치기 ↓';if(_detailsOpen&&PLOTLY_READY){renderTemp();renderStress();renderLMP();renderHeatmap();}}
+async function applyParams(){var btn=document.getElementById('apply-btn');btn.disabled=true;vxShowLoading({title:'조건 재계산 중',steps:['새 sweep 범위 확인 중…','온도별 수명 예측 중…','응력별 수명 예측 중…','차트 갱신 중…'],interval:900});var params={temp_min:+document.getElementById('c-tmin').value,temp_max:+document.getElementById('c-tmax').value,fixed_stress:+document.getElementById('c-fs').value,stress_min:+document.getElementById('c-smin').value,stress_max:+document.getElementById('c-smax').value,fixed_temp:+document.getElementById('c-ft').value,products_features:RD.products.map(function(p){return p._features;})};try{var resp=await fetch('/resweep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)});if(!resp.ok)throw new Error('서버 오류 '+resp.status);var result=await resp.json();result.products.forEach(function(p,i){Object.assign(RD.products[i],p);});Object.assign(RD,{fixed_stress:result.fixed_stress,fixed_temp:result.fixed_temp,temp_min:params.temp_min,temp_max:params.temp_max,stress_min:params.stress_min,stress_max:params.stress_max});_curTemp=RD.fixed_temp;_curStress=RD.fixed_stress;initSliders();renderAll();}catch(e){alert('재계산 실패: '+e.message);}finally{vxHideLoading();btn.disabled=false;}}
+function downloadCsv(filename,rows){var csv=rows.map(function(r){return r.map(function(v){if(v==null)return'';var s=String(v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(',');}).join('\r\n');var blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
+function productRows(p){var rows=[['product','sweep_type','temp_k','stress_mpa','log10_hours','hours']];p.temp_sweep.temps_k.forEach(function(t,j){rows.push([p.name,'temp_sweep',t,RD.fixed_stress,p.temp_sweep.log10_hours[j],p.temp_sweep.hours[j]]);});p.stress_sweep.stresses_mpa.forEach(function(s,j){rows.push([p.name,'stress_sweep',RD.fixed_temp,s,p.stress_sweep.log10_hours[j],p.stress_sweep.hours[j]]);});return rows;}
+function exportProductCsv(i){downloadCsv('vertex_'+RD.products[i].name+'_sweep.csv',productRows(RD.products[i]));}
+document.getElementById('export-all-btn').onclick=function(){var rows=[['product','sweep_type','temp_k','stress_mpa','log10_hours','hours']];RD.products.forEach(function(p){productRows(p).slice(1).forEach(function(r){rows.push(r);});});downloadCsv('vertex_all_products_sweep.csv',rows);};
+window.addEventListener('vx-themechange',function(){if(PLOTLY_READY)renderAll();});
+initSliders();loadPlotly();
+
+vxMountAssistant({
+  contextLabelProvider:function(){return RD.products[_dashIdx].name+' · '+Math.round(_curTemp)+' K · '+_curStress.toFixed(0)+' MPa';},
+  stateProvider:function(){var p=RD.products[_dashIdx];return{composition:p.composition||{},conditions:{temp:_curTemp,stress:_curStress},heat_treatment:p.heat_treatment||{}};},
+  quickPrompts:['현재 조건의 예상 수명은?','이 소재에서 W의 역할을 문헌 근거로 설명해줘','W를 조금 높이면 수명이 어떻게 달라져?','현재 수명과 관련된 장기 크립 경향을 설명해줘']
+});
+</script>
+</body>
+</html>

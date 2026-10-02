@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vertex — Creep Life Intelligence</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+<style>
+.home-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(420px,.95fr);gap:34px;align-items:start;padding-top:20px}
+.hero-copy{padding:52px 6px 20px}.hero-copy h1{font-size:clamp(2.6rem,5vw,4.9rem);line-height:1.02;letter-spacing:-.055em;margin:20px 0 20px;font-weight:900;max-width:780px}.hero-grad{background:var(--accent-grad);-webkit-background-clip:text;background-clip:text;color:transparent}.hero-copy p{max-width:680px;font-size:1rem;color:var(--text-dim);line-height:1.85}.hero-points{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:28px}.hero-point{padding:14px;border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--surface) 74%,transparent)}.hero-point b{display:block;font-size:.79rem;margin-bottom:5px}.hero-point span{font-size:.7rem;color:var(--text-faint);line-height:1.5}
+.predict-card{padding:24px;position:relative;overflow:hidden}.predict-card:before{content:"";position:absolute;inset:0 auto auto 0;width:100%;height:3px;background:var(--accent-grad)}.card-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:20px}.card-head .step{font-size:.66rem;color:var(--text-faint);border:1px solid var(--border);border-radius:999px;padding:5px 8px}
+.upload-zone{border:1.5px dashed var(--border);border-radius:14px;padding:24px;text-align:center;cursor:pointer;transition:.18s;background:var(--surface-2)}.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--surface-2))}.upload-zone.has-file{border-style:solid;border-color:color-mix(in srgb,var(--ok) 55%,var(--border));background:color-mix(in srgb,var(--ok) 6%,var(--surface-2))}.upload-icon{width:46px;height:46px;border-radius:13px;margin:0 auto 11px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 11%,var(--surface));color:var(--accent);font-weight:900;font-size:1.2rem;transition:.18s}.upload-zone.has-file .upload-icon{background:color-mix(in srgb,var(--ok) 14%,var(--surface));color:var(--ok)}.upload-zone input{display:none}.upload-title{font-size:.86rem;font-weight:800;overflow-wrap:anywhere}.upload-zone.has-file .upload-title{color:var(--text)}.upload-hint{font-size:.68rem;color:var(--text-faint);margin-top:6px;line-height:1.5}
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.field{display:flex;flex-direction:column;gap:5px}.field span{font-size:.68rem;color:var(--text-dim)}.field small{font-size:.62rem;color:var(--text-faint)}.form-section{margin-top:19px}.form-section-title{font-size:.69rem;font-weight:800;color:var(--text);margin-bottom:9px}.submit-row{display:flex;gap:9px;margin-top:20px}.submit-row .btn-primary{flex:1}.err-box{border:1px solid color-mix(in srgb,var(--bad) 65%,var(--border));background:color-mix(in srgb,var(--bad) 8%,var(--surface));color:var(--bad);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:.76rem}
+.workflow{margin-top:66px;padding:26px}.workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-top:18px}.wf{padding:15px;border-radius:13px;background:var(--surface-2);border:1px solid var(--border-soft)}.wf-num{font-size:.64rem;color:var(--accent);font-weight:850;letter-spacing:.08em}.wf b{display:block;font-size:.82rem;margin:7px 0 5px}.wf p{font-size:.69rem;color:var(--text-dim);line-height:1.55}
+@media(max-width:1040px){.home-hero{grid-template-columns:1fr}.hero-copy{padding-top:26px}.predict-card{max-width:760px}.workflow{margin-top:28px}}@media(max-width:650px){.hero-points,.workflow-grid,.form-grid{grid-template-columns:1fr}.hero-copy h1{font-size:2.8rem}.predict-card{padding:18px}}
+</style>
+</head>
+<body>
+{% include '_loading_overlay.html' %}
+<header class="vx-header">
+  <a class="vx-brand" href="/">
+    <span class="vx-brand-mark">V</span>
+    <span class="vx-brand-copy"><span class="vx-brand-name">Vertex</span><span class="vx-brand-sub">CREEP LIFE INTELLIGENCE</span></span>
+  </a>
+  <nav class="vx-nav">
+    <a class="vx-nav-link" href="/assistant">Vertex AI</a>
+    <button id="theme-toggle" title="테마 전환">☀</button>
+  </nav>
+</header>
+
+<main class="vx-container">
+  <section class="home-hero">
+    <div class="hero-copy">
+      <span class="vx-kicker"><span class="vx-kicker-dot"></span>AI-assisted creep life analysis</span>
+      <h1>예측과 문헌을<br><span class="hero-grad">하나의 흐름으로.</span></h1>
+      <p>Vertex는 합금 조성·열처리·사용 조건을 기반으로 크립 수명을 예측하고, RAG 기반 문헌 검색과 What-if 분석을 통해 결과를 해석할 수 있도록 돕는 전문가용 의사결정 지원 도구입니다.</p>
+      <div class="hero-points">
+        <div class="hero-point"><b>Life Prediction</b><span>Transformer + Tree 앙상블 기반 수명 추론</span></div>
+        <div class="hero-point"><b>Literature RAG</b><span>BGE-M3 검색과 로컬 LLM 기반 문헌 설명</span></div>
+        <div class="hero-point"><b>What-if</b><span>변경 후보를 같은 예측 모델로 Before / After 비교</span></div>
+      </div>
+    </div>
+
+    <section class="vx-card predict-card">
+      <div class="card-head">
+        <div><div class="vx-section-title">새 크립 수명 분석</div><div class="vx-section-sub">제품 데이터 업로드 후 온도·응력 범위를 설정하세요.</div></div>
+        <span class="step">STEP 01</span>
+      </div>
+      {% if error %}<div class="err-box">{{ error }}</div>{% endif %}
+      <form method="POST" action="/predict" enctype="multipart/form-data" id="predict-form">
+        <div class="upload-zone" id="uz">
+          <label for="fup">
+            <div class="upload-icon" id="upload-icon">＋</div>
+            <div class="upload-title" id="upload-title">xlsx / csv 파일 선택</div>
+            <div class="upload-hint" id="upload-hint">조성·열처리 컬럼 포함 · lifetime 컬럼은 없어도 됩니다.<br>파일을 이 영역에 끌어다 놓을 수도 있어요.</div>
+          </label>
+          <input type="file" id="fup" name="file" accept=".xlsx,.csv" required>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">온도 Sweep</div>
+          <div class="form-grid">
+            <label class="field"><span>최소 온도 (K)</span><input type="number" name="temp_min" value="600" step="any" min="300" max="2000"></label>
+            <label class="field"><span>최대 온도 (K)</span><input type="number" name="temp_max" value="700" step="any" min="300" max="2000"></label>
+            <label class="field"><span>고정 응력 (MPa)</span><input type="number" name="fixed_stress" value="100" step="any" min="1" max="1000"><small>온도 sweep 기준</small></label>
+          </div>
+        </div>
+        <div class="form-section">
+          <div class="form-section-title">응력 Sweep</div>
+          <div class="form-grid">
+            <label class="field"><span>최소 응력 (MPa)</span><input type="number" name="stress_min" value="30" step="any" min="1" max="1000"></label>
+            <label class="field"><span>최대 응력 (MPa)</span><input type="number" name="stress_max" value="130" step="any" min="1" max="2000"></label>
+            <label class="field"><span>고정 온도 (K)</span><input type="number" name="fixed_temp" value="650" step="any" min="300" max="2000"><small>응력 sweep 기준</small></label>
+          </div>
+        </div>
+        <div class="submit-row"><button type="submit" class="btn-primary" id="submit-btn">분석 시작 →</button></div>
+      </form>
+    </section>
+  </section>
+
+  <section class="vx-card workflow">
+    <div class="vx-section-title">Vertex workflow</div>
+    <div class="vx-section-sub">예측 모델과 AI Assistant를 중심으로 분석 흐름을 구성했습니다.</div>
+    <div class="workflow-grid">
+      <div class="wf"><span class="wf-num">01 · PREDICT</span><b>수명 예측</b><p>입력 소재를 동일한 모델로 온도·응력 조건별 추론합니다.</p></div>
+      <div class="wf"><span class="wf-num">02 · EXPLORE</span><b>조건 탐색</b><p>결과 페이지에서 온도와 응력을 바꾸며 수명 변화를 확인합니다.</p></div>
+      <div class="wf"><span class="wf-num">03 · ASK</span><b>AI 설명</b><p>문헌 근거, 예측 결과, What-if 비교를 Vertex AI에서 연결합니다.</p></div>
+    </div>
+  </section>
+</main>
+<script>
+(function(){
+  var inp=document.getElementById('fup'),uz=document.getElementById('uz');
+  var title=document.getElementById('upload-title'),hint=document.getElementById('upload-hint'),icon=document.getElementById('upload-icon');
+  function onFile(f){
+    if(f){
+      title.textContent=f.name;
+      hint.textContent='파일 선택 완료 · 클릭하면 다른 파일로 변경할 수 있습니다.';
+      icon.textContent='✓';
+      uz.classList.add('has-file');
+    }else{
+      title.textContent='xlsx / csv 파일 선택';
+      hint.innerHTML='조성·열처리 컬럼 포함 · lifetime 컬럼은 없어도 됩니다.<br>파일을 이 영역에 끌어다 놓을 수도 있어요.';
+      icon.textContent='＋';
+      uz.classList.remove('has-file');
+    }
+  }
+  inp.addEventListener('change',function(){onFile(this.files[0]);});
+  ['dragenter','dragover'].forEach(function(ev){uz.addEventListener(ev,function(e){e.preventDefault();uz.classList.add('drag');});});
+  ['dragleave','drop'].forEach(function(ev){uz.addEventListener(ev,function(e){e.preventDefault();uz.classList.remove('drag');});});
+  uz.addEventListener('drop',function(e){if(e.dataTransfer.files&&e.dataTransfer.files.length){inp.files=e.dataTransfer.files;onFile(inp.files[0]);}});
+})();
+(function(){var form=document.getElementById('predict-form'),btn=document.getElementById('submit-btn');form.addEventListener('submit',function(){if(!form.checkValidity())return;btn.disabled=true;vxShowLoading({title:'크립 수명 분석 중',steps:['제품 데이터 읽는 중…','조성·열처리 피처 구성 중…','온도·응력 조건별 수명 예측 중…','결과 대시보드 준비 중…'],interval:1200});});})();
+vxMountAssistant({contextLabel:'문헌 기반 Knowledge 질문을 바로 사용할 수 있습니다.',quickPrompts:['9Cr강에서 Cr의 역할은?','W가 장기 크립 성능에 미치는 영향은?','크립 강도와 크립 수명의 차이는?']});
+</script>
+</body>
+</html>

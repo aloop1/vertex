@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vertex AI — Literature & Creep Assistant</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='vertex.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+<style>
+.ai-page{display:grid;grid-template-columns:minmax(260px,.65fr) minmax(520px,1.35fr);gap:22px;align-items:stretch}.ai-intro{padding:28px}.ai-intro h1{font-size:2rem;line-height:1.15;letter-spacing:-.04em;margin:17px 0 12px}.ai-intro p{font-size:.82rem;color:var(--text-dim);line-height:1.75}.cap-list{display:flex;flex-direction:column;gap:9px;margin-top:24px}.cap{padding:13px 14px;border-radius:12px;border:1px solid var(--border-soft);background:var(--surface-2)}.cap b{display:block;font-size:.78rem;margin-bottom:4px}.cap span{font-size:.69rem;color:var(--text-dim);line-height:1.5}.note{margin-top:18px;padding:12px;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--surface-2));border-radius:0 10px 10px 0;font-size:.69rem;color:var(--text-dim);line-height:1.55}.assistant-stage{min-width:0}.legacy-note{font-size:.64rem;color:var(--text-faint);margin-top:14px}@media(max-width:920px){.ai-page{grid-template-columns:1fr}.vx-assistant.vx-assistant-embedded{height:720px}}
+</style>
+</head>
+<body>
+<header class="vx-header">
+  <a class="vx-brand" href="/"><span class="vx-brand-mark">V</span><span class="vx-brand-copy"><span class="vx-brand-name">Vertex</span><span class="vx-brand-sub">AI ASSISTANT</span></span></a>
+  <nav class="vx-nav"><a class="vx-nav-link" href="/">수명 예측</a><button id="theme-toggle" title="테마 전환">☀</button></nav>
+</header>
+<main class="vx-container">
+  <div class="ai-page">
+    <aside class="vx-card ai-intro">
+      <span class="vx-kicker"><span class="vx-kicker-dot"></span>Vertex AI</span>
+      <h1>문헌과 예측을<br>질문으로 연결하세요.</h1>
+      <p>이 페이지에서는 문헌 기반 Knowledge 질문과 일반적인 프로젝트 설명을 사용할 수 있습니다. 현재 소재의 조성·온도·응력이 필요한 Prediction / What-if 질문은 먼저 수명 예측을 실행한 뒤 결과 페이지의 Vertex AI를 이용하는 것이 가장 정확합니다.</p>
+      <div class="cap-list">
+        <div class="cap"><b>Knowledge RAG</b><span>BGE-M3가 관련 문장을 검색하고 로컬 LLM이 검색 근거를 사용자 질문에 맞게 정리합니다.</span></div>
+        <div class="cap"><b>Prediction</b><span>현재 소재 상태가 연결된 경우 프로젝트 수명 예측 모델의 결과를 보여줍니다.</span></div>
+        <div class="cap"><b>What-if</b><span>조성·조건 변경 후보를 동일한 Predictor로 다시 계산해 Before / After를 비교합니다.</span></div>
+      </div>
+      <div class="note">로컬 LLM은 수명을 직접 계산하거나 문헌을 직접 검색하지 않습니다. 검색된 근거와 프로젝트 예측 결과를 읽고 설명하는 역할을 담당합니다.</div>
+    </aside>
+    <section class="assistant-stage" id="assistant-root"></section>
+  </div>
+</main>
+<script>
+vxMountAssistant({embedded:true,target:'#assistant-root',contextLabel:'Knowledge 모드 · 소재 상태가 없는 독립 질문',quickPrompts:['9Cr강에서 Cr 함량은 장기 크립 강도에 어떤 영향을 미쳐?','W와 Mo의 역할 차이를 문헌 근거로 설명해줘','Laves phase가 장시간 크립에서 왜 중요한가?','9Cr강과 12Cr강의 크립 특성 차이는?']});
+</script>
+</body>
+</html>
