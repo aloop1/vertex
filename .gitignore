@@ -20,6 +20,19 @@ knowledge_base/domain_docs/*
 !knowledge_base/domain_docs/.gitkeep
 knowledge_base/__pycache__/
 
+# RAG 생성물 제외, 폴더 구조는 유지
+data/assistant/rag_data/chroma_db_bge_m3/*
+!data/assistant/rag_data/chroma_db_bge_m3/.gitkeep
+
+data/assistant/rag_data/index/*
+!data/assistant/rag_data/index/.gitkeep
+
+data/assistant/what_if_data/*
+!data/assistant/what_if_data/.gitkeep
+
+# PDF는 카톡으로 공유하겠음
+data/assistant/rag_data/*.pdf
+
 # ── 이력서/포트폴리오 등 생성 문서 ────────────────────────
 # 소스가 아니고 바이너리라 diff가 불가능하다. 개인정보(연락처)도 들어 있어
 # 공개 저장소에 올라가면 안 된다. 원본은 Desktop/이력서/ 에서 관리한다.
@@ -28,3 +41,6 @@ knowledge_base/__pycache__/
 *.pdf
 *.hwp
 *.pptx
+data/assistant/rag_data/chroma_db_bge_m3/
+data/assistant/rag_data/index/
+data/assistant/what_if_data/what_if_cache.json
