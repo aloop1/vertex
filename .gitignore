@@ -41,6 +41,4 @@ data/assistant/rag_data/*.pdf
 *.pdf
 *.hwp
 *.pptx
-data/assistant/rag_data/chroma_db_bge_m3/
-data/assistant/rag_data/index/
 data/assistant/what_if_data/what_if_cache.json
